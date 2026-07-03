@@ -1,0 +1,111 @@
+// CollabCanvas database schema.
+//
+// NOTE (Prisma 7 vs the project spec): the spec sketched `web/prisma/schema.prisma`
+// with the classic `prisma-client-js` generator. Prisma 7 replaced that with the
+// `prisma-client` generator (TypeScript source emitted to an explicit output
+// path), so the schema + generated client live here in a shared workspace
+// package (`@collabcanvas/db`) that both the web app and the WS server import.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (NextAuth) adapter models — standard shapes required by
+// @auth/prisma-adapter (verified against the installed adapter's docs).
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  ownedBoards   Board[]
+  memberships   BoardMember[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Boards, membership, snapshots (spec §4)
+// ---------------------------------------------------------------------------
+
+model Board {
+  id        String         @id @default(cuid())
+  title     String
+  ownerId   String
+  owner     User           @relation(fields: [ownerId], references: [id])
+  members   BoardMember[]
+  snapshot  BoardSnapshot?
+  createdAt DateTime       @default(now())
+}
+
+model BoardMember {
+  id      String @id @default(cuid())
+  boardId String
+  userId  String
+  role    String // "editor" | "viewer"
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id])
+
+  @@unique([boardId, userId])
+}
+
+// One snapshot row per board — `state` is Y.encodeStateAsUpdate(doc).
+model BoardSnapshot {
+  boardId   String   @id
+  state     Bytes
+  updatedAt DateTime @updatedAt
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+}
+
+// Phase 5: lightweight named history for rollback.
+model BoardSnapshotHistory {
+  id        String   @id @default(cuid())
+  boardId   String
+  state     Bytes
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([boardId, createdAt])
+}

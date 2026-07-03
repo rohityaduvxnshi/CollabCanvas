@@ -1,0 +1,20 @@
+<!-- WinSW wrapper: Caddy reverse proxy as a Windows service.
+     Place WinSW-x64.exe beside this file as caddy.exe (the WRAPPER, distinct
+     from C:\caddy.exe which is Caddy itself), then:
+       C:\apps\winsw\caddy.exe install -->
+<service>
+  <id>caddy</id>
+  <name>Caddy (reverse proxy)</name>
+  <description>HTTPS reverse proxy for all sites on this box (:80/:443)</description>
+  <executable>C:\caddy.exe</executable>
+  <arguments>run --config C:\apps\caddy\Caddyfile</arguments>
+  <workingdirectory>C:\apps\caddy</workingdirectory>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <log mode="roll-by-size">
+    <logpath>C:\apps\logs</logpath>
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>

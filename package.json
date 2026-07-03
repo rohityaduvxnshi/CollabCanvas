@@ -1,0 +1,28 @@
+{
+  "name": "collabcanvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real-time collaborative kanban board (Next.js + Yjs CRDT + WebSockets).",
+  "workspaces": [
+    "web",
+    "ws-server",
+    "packages/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run generate --workspace=packages/db",
+    "dev": "npm run dev --workspace=web",
+    "dev:ws": "npm run dev --workspace=ws-server",
+    "dev:all": "concurrently -n web,ws -c blue,magenta \"npm:dev\" \"npm:dev:ws\"",
+    "build": "npm run build --workspace=web",
+    "start:ws": "npm run start --workspace=ws-server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:unit": "tsx --test scripts/unit/yjs.test.ts",
+    "lint": "npm run lint --workspace=web"
+  },
+  "devDependencies": {
+    "concurrently": "^9",
+    "fake-indexeddb": "^6.2.5",
+    "tsx": "^4.22.5",
+    "typescript": "^5"
+  }
+}

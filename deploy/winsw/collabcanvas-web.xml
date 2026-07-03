@@ -1,0 +1,21 @@
+<!-- WinSW wrapper: Next.js web app as a Windows service.
+     Place WinSW-x64.exe beside this file as collabcanvas-web.exe, then:
+       C:\apps\winsw\collabcanvas-web.exe install
+     next start loads web\.env.production from the working directory. -->
+<service>
+  <id>collabcanvas-web</id>
+  <name>CollabCanvas Web (Next.js)</name>
+  <description>CollabCanvas web app on 127.0.0.1:3000 (proxied by Caddy)</description>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>C:\apps\collabcanvas\node_modules\next\dist\bin\next start -p 3000 -H 127.0.0.1</arguments>
+  <workingdirectory>C:\apps\collabcanvas\web</workingdirectory>
+  <env name="NODE_ENV" value="production" />
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <log mode="roll-by-size">
+    <logpath>C:\apps\logs</logpath>
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>

@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/* CollabCanvas design tokens — ported from the Claude Design delivery
+   (docs: CollabCanvas.dc.html in the design project). Neo-brutalist: warm
+   cream surfaces, 2–2.5px ink borders, hard offset shadows, Fredoka display
+   type. Light is the default; dark overrides via [data-cc-theme="dark"] on
+   <html>. */
+:root {
+  --app: #efe5d0;
+  --dot: rgba(28, 26, 23, 0.055);
+  --surface: #ffffff;
+  --surface-2: #f7f0e1;
+  --sunk: #efe6d3;
+  --ink: #1c1a17;
+  --ink-soft: #6b6252;
+  --ink-faint: #9a8f77;
+  --line: #1c1a17;
+  --chip-line: #1c1a17;
+  --shadow: #1c1a17;
+  --paper: #ffffff;
+  --violet: #9b7bff;
+  --coral: #ff6b5e;
+  --teal: #3fc7b4;
+  --sun: #ffcf4d;
+  --green: #8ee6b0;
+  --amber: #e0a13a;
+  --sky: #5aa8ff;
+  --band-violet: #c7b8ff;
+  --band-coral: #ff9f8a;
+  --band-teal: #6fe0d0;
+  --band-sun: #ffdf8a;
+  --band-sky: #a9d0ff;
+  --band-pink: #ffb3c1;
+  --hot: #ff9f8a;
+  --pill-off: #d8d2c4;
+  scrollbar-color: #c9bda4 #efe6d3;
+}
+
+[data-cc-theme="dark"] {
+  --app: #2a241b;
+  --dot: rgba(240, 231, 208, 0.07);
+  --surface: #362f22;
+  --surface-2: #413929;
+  --sunk: #2f2920;
+  --ink: #f0e7d0;
+  --ink-soft: #b3a88c;
+  --ink-faint: #8b8066;
+  --line: #c7ba9c;
+  --chip-line: #241e13;
+  --shadow: #191408;
+  --paper: #e9dfc4;
+  --violet: #8f78dd;
+  --coral: #dd6a5c;
+  --teal: #3daa99;
+  --sun: #dcb44e;
+  --green: #7cc194;
+  --amber: #bd8c39;
+  --sky: #6c9cd9;
+  --band-violet: #9184c7;
+  --band-coral: #c67862;
+  --band-teal: #54a99b;
+  --band-sun: #cfae61;
+  --band-sky: #7fa3cd;
+  --band-pink: #c2808f;
+  --hot: #c67862;
+  --pill-off: #a89d84;
+  scrollbar-color: #5a5140 #2f2920;
+}
+
+@theme inline {
+  --font-display: var(--font-fredoka);
+  --font-sans: var(--font-grotesk);
+  --font-mono: var(--font-space-mono);
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+body {
+  background: var(--app);
+  color: var(--ink);
+  font-family: var(--font-grotesk), system-ui, sans-serif;
+}
+
+/* Dotted app backdrop (design: 22px radial-dot grid). */
+.cc-dots {
+  background-color: var(--app);
+  background-image: radial-gradient(var(--dot) 1.4px, transparent 1.4px);
+  background-size: 22px 22px;
+}
+
+/* Hard-shadow press effect used on every chunky button. */
+.cc-press:active {
+  transform: translate(2px, 2px);
+  box-shadow: none !important;
+}
+
+@keyframes ccpulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.32;
+  }
+}
+@keyframes ccspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ccpop {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes ccrise {
+  0% {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

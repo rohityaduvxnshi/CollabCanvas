@@ -1,0 +1,5 @@
+# Global Caddy config for the VPS — ONE Caddy process owns :80/:443 for every
+# site on the box. Each site lives in its own file under sites\.
+# Reload after changes:  C:\caddy.exe reload --config C:\apps\caddy\Caddyfile
+
+import sites/*.caddy

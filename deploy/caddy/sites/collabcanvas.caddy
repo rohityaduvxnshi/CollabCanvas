@@ -1,0 +1,12 @@
+# CollabCanvas — web app + WebSocket sync server.
+# Caddy proxies WebSocket upgrades automatically; certs are auto-issued per
+# hostname (the *.dash-board.in A record already points here).
+
+collabcanvas.dash-board.in {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000
+}
+
+collabcanvas-ws.dash-board.in {
+	reverse_proxy 127.0.0.1:4000
+}

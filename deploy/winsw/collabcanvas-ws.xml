@@ -1,0 +1,21 @@
+<!-- WinSW wrapper: Yjs WebSocket sync server as a Windows service.
+     Place WinSW-x64.exe beside this file as collabcanvas-ws.exe, then:
+       C:\apps\winsw\collabcanvas-ws.exe install
+     The server loads ws-server\.env itself (process.loadEnvFile). -->
+<service>
+  <id>collabcanvas-ws</id>
+  <name>CollabCanvas WS (Yjs sync)</name>
+  <description>CollabCanvas realtime sync server on 127.0.0.1:4000 (proxied by Caddy)</description>
+  <executable>C:\Program Files\nodejs\node.exe</executable>
+  <arguments>C:\apps\collabcanvas\node_modules\tsx\dist\cli.mjs src\index.ts</arguments>
+  <workingdirectory>C:\apps\collabcanvas\ws-server</workingdirectory>
+  <env name="NODE_ENV" value="production" />
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <log mode="roll-by-size">
+    <logpath>C:\apps\logs</logpath>
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>
