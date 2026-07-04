@@ -30,6 +30,9 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { CardView, Role } from "@collabcanvas/shared";
 import { useBoard } from "@/lib/board/useBoard";
 import { useBoardRoom } from "@/lib/board/BoardRoomProvider";
+import { ExportButtons } from "@/components/ExportButtons";
+import { boardToHtml, boardToMarkdown } from "@/lib/exporters";
+import { downloadText, printHtml, safeName } from "@/lib/download";
 import { usePresence } from "@/lib/board/usePresence";
 import { replaceDocFromSnapshot } from "@/lib/yjs/restore";
 import { shareBoardAction } from "@/lib/actions";
@@ -309,6 +312,21 @@ export function BoardScreen({ boardId, members = [] }: BoardScreenProps) {
         right={
           <>
             <PresenceBar peers={peers} />
+            <ExportButtons
+              items={[
+                {
+                  label: "MD",
+                  title: "Markdown",
+                  onClick: () => downloadText(`${safeName(data.title)}.md`, boardToMarkdown(data), "text/markdown"),
+                },
+                {
+                  label: "Word",
+                  title: "HTML document — opens in Word",
+                  onClick: () => downloadText(`${safeName(data.title)}.doc`, boardToHtml(data), "application/msword"),
+                },
+                { label: "PDF", title: "Print → Save as PDF", onClick: () => printHtml(boardToHtml(data)) },
+              ]}
+            />
             <button
               onClick={openHistory}
               className="cc-press rounded-[9px] border-2 border-[var(--line)] bg-[var(--surface-2)] px-3 py-1.5 font-sans text-[12.5px] font-semibold text-[var(--ink)] shadow-[2px_2px_0_var(--shadow)]"

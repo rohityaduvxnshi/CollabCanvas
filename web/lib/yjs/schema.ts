@@ -54,6 +54,93 @@ export const cardTitle = (card: YCard): string =>
 export const cardDescription = (card: YCard): string =>
   (card.get("description") as string | undefined) ?? "";
 
+// --- Rich descriptions (N1) -------------------------------------------------
+// Cards gain a `desc` Y.XmlFragment edited by TipTap via y-sync. The legacy
+// `description` string remains for cards that predate N1; on first rich edit
+// the string is migrated into the fragment and cleared (the fragment becomes
+// the single source of truth).
+
+export const CARD_DESC = "desc";
+
+export const cardDescFragment = (card: YCard): Y.XmlFragment | null => {
+  const frag = card.get(CARD_DESC);
+  return frag instanceof Y.XmlFragment ? frag : null;
+};
+
+/** Plain text of one XML node — formatting dropped, blocks joined with \n. */
+const nodeText = (node: Y.XmlElement | Y.XmlText | Y.XmlHook): string => {
+  if (node instanceof Y.XmlText) {
+    // toString() would include formatting tags (<bold>…) — use the delta.
+    return (node.toDelta() as { insert?: unknown }[])
+      .map((op) => (typeof op.insert === "string" ? op.insert : ""))
+      .join("");
+  }
+  if (node instanceof Y.XmlElement) {
+    const children = node.toArray();
+    const inline = children.some((c) => c instanceof Y.XmlText);
+    return children.map(nodeText).join(inline ? "" : "\n");
+  }
+  return "";
+};
+
+/** Plain-text preview of a rich description fragment. */
+export const fragmentToText = (frag: Y.XmlFragment): string =>
+  frag
+    .toArray()
+    .map(nodeText)
+    .join("\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+// The card FACE shows only a couple of lines. Cap the preview so a card whose
+// rich description grew large doesn't produce a huge string on every re-derive
+// (deriveBoardView runs on every doc update — each remote keystroke).
+// ponytail: caps the derived string, not the walk itself; realistic
+// descriptions are small, so the walk cost is a non-issue — revisit only if
+// pathologically large descriptions ever show up.
+const PREVIEW_MAX = 280;
+
+/** Preview text for a card: rich fragment when it has content, else legacy. */
+export const cardDescText = (card: YCard): string => {
+  const frag = cardDescFragment(card);
+  if (frag) {
+    const text = fragmentToText(frag);
+    if (text) return text.length > PREVIEW_MAX ? text.slice(0, PREVIEW_MAX) : text;
+  }
+  return cardDescription(card);
+};
+
+/**
+ * Get-or-create the rich description fragment, migrating the legacy string
+ * into it (as paragraphs) exactly once.
+ *
+ * ponytail: two clients calling this concurrently on a never-migrated card
+ * race on `card.set(CARD_DESC, …)` — LWW keeps one fragment and both seeds
+ * held the same legacy text, so nothing user-typed is lost beyond the
+ * sub-second window. Not worth a coordination protocol.
+ */
+export const ensureCardDescFragment = (doc: Y.Doc, card: YCard): Y.XmlFragment => {
+  const existing = cardDescFragment(card);
+  if (existing) return existing;
+  const frag = new Y.XmlFragment();
+  doc.transact(() => {
+    card.set(CARD_DESC, frag);
+    const legacy = cardDescription(card);
+    if (legacy) {
+      frag.insert(
+        0,
+        legacy.split("\n").map((line) => {
+          const p = new Y.XmlElement("paragraph");
+          if (line) p.insert(0, [new Y.XmlText(line)]);
+          return p;
+        }),
+      );
+      card.set("description", ""); // the fragment is the source of truth now
+    }
+  });
+  return frag;
+};
+
 // --- Entity factories ------------------------------------------------------
 
 /** Build a detached column Y.Map (with its own cardOrder Y.Array). */

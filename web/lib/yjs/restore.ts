@@ -17,6 +17,8 @@
 
 import * as Y from "yjs";
 import {
+  CARD_DESC,
+  cardDescFragment,
   cardDescription,
   cardTitle,
   colCardOrder,
@@ -30,6 +32,36 @@ import {
   type YCard,
   type YColumn,
 } from "./schema";
+
+/**
+ * N1: restore a card's rich-description fragment IN PLACE — the live
+ * Y.XmlFragment instance survives (same principle as the card maps: replacing
+ * it would tombstone the subtree and any concurrent typing would vanish into
+ * a deleted fragment). Content is cleared and refilled with clones from the
+ * snapshot; toString() (which includes formatting tags) is the change check.
+ */
+function restoreDescFragment(live: YCard, snapshotCard: YCard): void {
+  const snapFrag = cardDescFragment(snapshotCard);
+  const liveFrag = cardDescFragment(live);
+  if (!snapFrag) {
+    // Snapshot predates rich text — empty the live fragment so the legacy
+    // string (restored above) is what cardDescText falls back to.
+    if (liveFrag && liveFrag.length > 0) liveFrag.delete(0, liveFrag.length);
+    return;
+  }
+  if (liveFrag && liveFrag.toString() === snapFrag.toString()) return;
+  let target = liveFrag;
+  if (!target) {
+    target = new Y.XmlFragment();
+    live.set(CARD_DESC, target);
+  } else if (target.length > 0) {
+    target.delete(0, target.length);
+  }
+  target.insert(
+    0,
+    snapFrag.toArray().map((n) => n.clone()) as (Y.XmlElement | Y.XmlText)[],
+  );
+}
 
 export function replaceDocFromSnapshot(doc: Y.Doc, snapshot: Uint8Array): void {
   const temp = new Y.Doc();
@@ -50,7 +82,7 @@ export function replaceDocFromSnapshot(doc: Y.Doc, snapshot: Uint8Array): void {
     // --- Cards: update in place / create missing / delete absent -----------
     for (const [cardId, raw] of tempCards.entries()) {
       const tCard = raw as YCard;
-      const live = cards.get(cardId);
+      let live = cards.get(cardId);
       if (live) {
         if (cardTitle(live) !== cardTitle(tCard)) live.set("title", cardTitle(tCard));
         if (cardDescription(live) !== cardDescription(tCard))
@@ -58,7 +90,9 @@ export function replaceDocFromSnapshot(doc: Y.Doc, snapshot: Uint8Array): void {
       } else {
         const created = (tCard.get("createdBy") as string | undefined) ?? "";
         cards.set(cardId, makeCard(cardId, cardTitle(tCard), cardDescription(tCard), created));
+        live = cards.get(cardId)!;
       }
+      restoreDescFragment(live, tCard);
     }
     for (const cardId of Array.from(cards.keys())) {
       if (!tempCards.has(cardId)) cards.delete(cardId);

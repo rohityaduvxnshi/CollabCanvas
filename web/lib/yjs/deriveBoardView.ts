@@ -22,7 +22,7 @@
 import type * as Y from "yjs";
 import type { BoardData, CardView, ColumnView } from "@collabcanvas/shared";
 import {
-  cardDescription,
+  cardDescText,
   cardTitle,
   colCardOrder,
   colTitle,
@@ -60,7 +60,8 @@ export function deriveBoardView(doc: Y.Doc): BoardData {
       cardViews.push({
         id: cardId,
         title: cardTitle(card),
-        description: cardDescription(card),
+        // N1: plain-text preview of the rich fragment (legacy string fallback).
+        description: cardDescText(card),
       });
     }
 

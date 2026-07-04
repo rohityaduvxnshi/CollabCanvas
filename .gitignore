@@ -24,3 +24,6 @@ Thumbs.db
 
 # prisma
 packages/db/src/generated/
+
+# N5: local file-attachment storage (do not commit uploads)
+.filestore/

@@ -26,10 +26,25 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
+  // Phase 7: email+password auth. Null for OAuth-only users.
+  passwordHash  String?
+  // Phase 7: onboarding "intro details".
+  bio           String?
   accounts      Account[]
   sessions      Session[]
   ownedBoards   Board[]
   memberships   BoardMember[]
+  // N2: doc pages (same ownership/membership shape as boards).
+  ownedPages    Page[]
+  pageMembers   PageMember[]
+  // N3: workspaces (organizational; sharing still flows through Board/PageMember).
+  ownedWorkspaces  Workspace[]
+  workspaceMembers WorkspaceMember[]
+  // N4: typed databases (same ownership/membership shape as boards/pages).
+  ownedDatabases   Database[]
+  databaseMembers  DatabaseMember[]
+  // N5: file attachments the user uploaded (for the per-user storage quota).
+  attachments      Attachment[]
 }
 
 model Account {
@@ -71,13 +86,16 @@ model VerificationToken {
 // ---------------------------------------------------------------------------
 
 model Board {
-  id        String         @id @default(cuid())
-  title     String
-  ownerId   String
-  owner     User           @relation(fields: [ownerId], references: [id])
-  members   BoardMember[]
-  snapshot  BoardSnapshot?
-  createdAt DateTime       @default(now())
+  id          String         @id @default(cuid())
+  title       String
+  ownerId     String
+  owner       User           @relation(fields: [ownerId], references: [id])
+  members     BoardMember[]
+  snapshot    BoardSnapshot?
+  createdAt   DateTime       @default(now())
+  // N3: which workspace this board is filed under (null = owner's Private).
+  workspaceId String?
+  workspace   Workspace?     @relation(fields: [workspaceId], references: [id])
 }
 
 model BoardMember {
@@ -108,4 +126,134 @@ model BoardSnapshotHistory {
   createdAt DateTime @default(now())
 
   @@index([boardId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// N2: Doc Pages — full-page collaborative TipTap docs. Same ownership +
+// membership + snapshot shape as boards; rooms are `page:<id>`.
+// ---------------------------------------------------------------------------
+
+model Page {
+  id          String        @id @default(cuid())
+  title       String
+  ownerId     String
+  owner       User          @relation(fields: [ownerId], references: [id])
+  members     PageMember[]
+  snapshot    PageSnapshot?
+  createdAt   DateTime      @default(now())
+  // N3: which workspace this page is filed under (null = owner's Private).
+  workspaceId String?
+  workspace   Workspace?    @relation(fields: [workspaceId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// N3: Workspaces — organize boards/pages into a Private space (per user) and
+// shared Team spaces. ORGANIZATIONAL only: socket access is still per
+// Board/PageMember (unchanged); sharing a team workspace fans out member rows
+// into those tables through the existing (reviewed) path.
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id        String            @id @default(cuid())
+  name      String
+  type      String            // "private" | "team"
+  ownerId   String
+  owner     User              @relation(fields: [ownerId], references: [id])
+  members   WorkspaceMember[]
+  boards    Board[]
+  pages     Page[]
+  databases Database[]
+  createdAt DateTime          @default(now())
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String    // "editor" | "viewer"
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@unique([workspaceId, userId])
+}
+
+model PageMember {
+  id     String @id @default(cuid())
+  pageId String
+  userId String
+  role   String // "editor" | "viewer"
+  page   Page   @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([pageId, userId])
+}
+
+// One snapshot row per page — `state` is Y.encodeStateAsUpdate(doc).
+model PageSnapshot {
+  pageId    String   @id
+  state     Bytes
+  updatedAt DateTime @updatedAt
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// N4: Typed databases — first-class collaborative tables. Same ownership +
+// membership + snapshot + workspace shape as pages; rooms are `db:<id>`.
+// The typed columns/rows live in the Yjs doc (web/lib/yjs/dbSchema.ts).
+// ---------------------------------------------------------------------------
+
+model Database {
+  id          String            @id @default(cuid())
+  title       String
+  ownerId     String
+  owner       User              @relation(fields: [ownerId], references: [id])
+  members     DatabaseMember[]
+  snapshot    DatabaseSnapshot?
+  attachments Attachment[]
+  createdAt   DateTime          @default(now())
+  workspaceId String?
+  workspace   Workspace?        @relation(fields: [workspaceId], references: [id])
+}
+
+model DatabaseMember {
+  id         String   @id @default(cuid())
+  databaseId String
+  userId     String
+  role       String // "editor" | "viewer"
+  database   Database @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([databaseId, userId])
+}
+
+// One snapshot row per database — `state` is Y.encodeStateAsUpdate(doc).
+model DatabaseSnapshot {
+  databaseId String   @id
+  state      Bytes
+  updatedAt  DateTime @updatedAt
+  database   Database @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// N5: File attachments — any file type, attached to database rows (the Yjs
+// attachment cell stores a JSON array of Attachment ids). Bytes live on disk
+// (web/lib/storage.ts); this row holds metadata + ownership for quota and the
+// databaseId for the download membership check. Caps (5MB/file, 500MB/user)
+// are enforced server-side at upload (LIMITS.fileMaxBytes / userStorageBytes).
+// ---------------------------------------------------------------------------
+
+model Attachment {
+  id         String   @id @default(cuid())
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id])
+  databaseId String
+  database   Database @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+  name       String
+  size       Int
+  mimeType   String
+  storageKey String
+  createdAt  DateTime @default(now())
+
+  @@index([ownerId])
+  @@index([databaseId])
 }

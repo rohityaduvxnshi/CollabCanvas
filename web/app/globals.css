@@ -34,6 +34,15 @@
   --hot: #ff9f8a;
   --pill-off: #d8d2c4;
   scrollbar-color: #c9bda4 #efe6d3;
+  /* N6 chart categorical palette — validated (dataviz validate_palette.js,
+     light: lightness band + chroma + CVD pass; contrast WARNs relieved by ink
+     borders + direct labels + table view). */
+  --chart-1: #8f78dd;
+  --chart-2: #2f9e8c;
+  --chart-3: #e0a13a;
+  --chart-4: #e0574a;
+  --chart-5: #4a86d8;
+  --chart-6: #c77dd0;
 }
 
 [data-cc-theme="dark"] {
@@ -65,6 +74,14 @@
   --hot: #c67862;
   --pill-off: #a89d84;
   scrollbar-color: #5a5140 #2f2920;
+  /* N6 chart palette — dark mode's OWN validated steps (not a flip): lightness
+     band + chroma + CVD + contrast all pass against the dark surface. */
+  --chart-1: #8a6fd0;
+  --chart-2: #2fa08d;
+  --chart-3: #bd8326;
+  --chart-4: #dc5e4d;
+  --chart-5: #4787d4;
+  --chart-6: #cb639b;
 }
 
 @theme inline {
@@ -94,6 +111,215 @@ body {
 .cc-press:active {
   transform: translate(2px, 2px);
   box-shadow: none !important;
+}
+
+/* Chunky action button/link recipe (Phase 7 dedup — was 5 inline copies).
+   Compose with a width + bg/text color; press effect included. */
+.cc-btn {
+  border: 2.5px solid var(--line);
+  border-radius: 11px;
+  padding: 10px 20px;
+  font-family: var(--font-fredoka), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 3px 3px 0 var(--shadow);
+  display: inline-block;
+  text-align: center;
+}
+.cc-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+.cc-btn:disabled {
+  opacity: 0.6;
+}
+
+/* N8: print-to-PDF — hide chrome, flatten the dotted backdrop so a page/board
+   prints as a clean document via the browser's Save-as-PDF. */
+@media print {
+  .cc-noprint {
+    display: none !important;
+  }
+  .cc-dots {
+    background: none !important;
+  }
+}
+
+/* --- N1: collaborative rich-text card descriptions (TipTap) --------------- */
+
+/* The ProseMirror content element inside the card editor — styled to match
+   the textarea it replaced. */
+.cc-richtext {
+  min-height: 56px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 2px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  padding: 4px 8px;
+  font-family: var(--font-grotesk), system-ui, sans-serif;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #1c1a17;
+  outline: none;
+  word-break: break-word;
+}
+.cc-richtext p {
+  margin: 0 0 3px;
+}
+.cc-richtext h1,
+.cc-richtext h2,
+.cc-richtext h3 {
+  font-family: var(--font-fredoka), system-ui, sans-serif;
+  font-weight: 600;
+  margin: 5px 0 3px;
+  line-height: 1.25;
+}
+.cc-richtext h1 {
+  font-size: 15px;
+}
+.cc-richtext h2 {
+  font-size: 13.5px;
+}
+.cc-richtext h3 {
+  font-size: 12.5px;
+}
+.cc-richtext ul,
+.cc-richtext ol {
+  margin: 0 0 3px;
+  padding-left: 18px;
+}
+.cc-richtext ul {
+  list-style: disc;
+}
+.cc-richtext ol {
+  list-style: decimal;
+}
+.cc-richtext blockquote {
+  border-left: 3px solid var(--line);
+  margin: 3px 0;
+  padding-left: 8px;
+  color: var(--ink-soft);
+}
+.cc-richtext code {
+  background: var(--sunk);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-family: var(--font-space-mono), monospace;
+  font-size: 10.5px;
+}
+.cc-richtext pre {
+  background: var(--sunk);
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 3px 0;
+}
+.cc-richtext pre code {
+  background: none;
+  padding: 0;
+}
+.cc-richtext a {
+  text-decoration: underline;
+}
+
+/* N2: full-page doc editor — same marks as .cc-richtext, page-sized. */
+.cc-page-doc {
+  min-height: 60vh;
+  outline: none;
+  font-family: var(--font-grotesk), system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  word-break: break-word;
+}
+.cc-page-doc p {
+  margin: 0 0 10px;
+}
+.cc-page-doc h1,
+.cc-page-doc h2,
+.cc-page-doc h3 {
+  font-family: var(--font-fredoka), system-ui, sans-serif;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 18px 0 8px;
+}
+.cc-page-doc h1 {
+  font-size: 26px;
+}
+.cc-page-doc h2 {
+  font-size: 21px;
+}
+.cc-page-doc h3 {
+  font-size: 17px;
+}
+.cc-page-doc ul,
+.cc-page-doc ol {
+  margin: 0 0 10px;
+  padding-left: 24px;
+}
+.cc-page-doc ul {
+  list-style: disc;
+}
+.cc-page-doc ol {
+  list-style: decimal;
+}
+.cc-page-doc blockquote {
+  border-left: 3px solid var(--line);
+  margin: 10px 0;
+  padding-left: 12px;
+  color: var(--ink-soft);
+}
+.cc-page-doc code {
+  background: var(--sunk);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: var(--font-space-mono), monospace;
+  font-size: 13px;
+}
+.cc-page-doc pre {
+  background: var(--sunk);
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  overflow-x: auto;
+}
+.cc-page-doc pre code {
+  background: none;
+  padding: 0;
+}
+.cc-page-doc a {
+  text-decoration: underline;
+}
+.cc-page-doc:focus {
+  outline: none;
+}
+
+/* Remote text carets (CollaborationCaret default render — color comes from
+   the peer's presence color via inline style). */
+.collaboration-carets__caret {
+  border-left: 1px solid;
+  border-right: 1px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+.collaboration-carets__label {
+  border-radius: 3px 3px 3px 0;
+  color: #1c1a17;
+  font-family: var(--font-grotesk), system-ui, sans-serif;
+  font-size: 8.5px;
+  font-weight: 700;
+  left: -1px;
+  line-height: normal;
+  padding: 1px 4px;
+  position: absolute;
+  top: -1.35em;
+  user-select: none;
+  white-space: nowrap;
 }
 
 @keyframes ccpulse {

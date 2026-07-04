@@ -44,6 +44,10 @@ export interface BoardRoom {
   doc: Y.Doc;
   store: BoardStore;
   presence: PresenceStore;
+  /** For collaborative sub-editors (N1: TipTap caret sharing). */
+  awareness: Awareness;
+  /** Local identity (name + presence color) — N1 caret labels. */
+  localUser: LocalUser;
   status: ConnectionStatus;
   /** Whether the local user may mutate the board (false for viewers). */
   canEdit: boolean;
@@ -94,6 +98,8 @@ export function BoardRoomProvider({
     doc: Y.Doc;
     store: BoardStore;
     presence: PresenceStore;
+    awareness: Awareness;
+    localUser: LocalUser;
   } | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [failed, setFailed] = useState(false);
@@ -121,7 +127,8 @@ export function BoardRoomProvider({
     const awareness = new Awareness(doc);
     const idb = new IndexeddbPersistence(roomForBoard(boardId), doc);
     const store = new BoardStore(doc);
-    const presence = new PresenceStore(awareness, presenceUser ?? getLocalUser());
+    const localUser = presenceUser ?? getLocalUser();
+    const presence = new PresenceStore(awareness, localUser);
 
     if (boardTitle) {
       void idb.whenSynced.then(() => {
@@ -184,7 +191,7 @@ export function BoardRoomProvider({
     // see header) — the set-state-in-effect heuristic is a false positive here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus(navigator.onLine ? "connecting" : "offline");
-    setHandle({ doc, store, presence });
+    setHandle({ doc, store, presence, awareness, localUser });
 
     // --- Network side: attach the WS provider once a token arrives. ---------
     void (async () => {
@@ -237,6 +244,8 @@ export function BoardRoomProvider({
       doc: handle.doc,
       store: handle.store,
       presence: handle.presence,
+      awareness: handle.awareness,
+      localUser: handle.localUser,
       status,
       canEdit,
     };

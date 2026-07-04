@@ -12,6 +12,9 @@ import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { CardView } from "@collabcanvas/shared";
+// N1: the one non-presentational child — an opaque collaborative editor from
+// the lib/board seam (same layer as the hooks this tree already consumes).
+import { CardDescEditor } from "@/lib/board/CardDescEditor";
 
 export interface CardProps {
   card: CardView;
@@ -41,7 +44,6 @@ export function Card({
 }: CardProps) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
-  const [description, setDescription] = useState(card.description);
 
   // If this card unmounts mid-edit (remote peer moved/deleted it), commit/cancel
   // never run — clear the presence "editing" state so peers don't see a badge
@@ -74,14 +76,15 @@ export function Card({
   const beginEdit = () => {
     if (!canEdit) return;
     setTitle(card.title);
-    setDescription(card.description);
     setEditing(true);
     editingRef.current = true;
     onEditFocus?.();
   };
 
+  // N1: Save commits the title only — description edits are live-collaborative
+  // through the rich editor (no save semantics for CRDT text).
   const commit = () => {
-    onUpdate({ title: title.trim() || card.title, description });
+    onUpdate({ title: title.trim() || card.title });
     setEditing(false);
     editingRef.current = false;
     onEditBlur?.();
@@ -111,13 +114,7 @@ export function Card({
           className="mb-1.5 w-full rounded-[7px] border-2 border-[var(--line)] bg-[var(--paper)] px-2 py-1 font-sans text-[12.5px] font-semibold text-[#1c1a17] outline-none"
           placeholder="Card title"
         />
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          className="w-full resize-none rounded-[7px] border-2 border-[var(--line)] bg-[var(--paper)] px-2 py-1 font-sans text-[11.5px] text-[#1c1a17] outline-none"
-          placeholder="Description (optional)"
-        />
+        <CardDescEditor cardId={card.id} />
         <div className="mt-1.5 flex items-center justify-between">
           <button
             onClick={() => {

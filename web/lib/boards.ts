@@ -28,13 +28,19 @@ export async function listBoardsForUser(userId: string): Promise<BoardListItem[]
   }));
 }
 
-/** Create a board; the owner is auto-added as an editor member (spec §4). */
-export async function createBoard(userId: string, title: string): Promise<string> {
+/** Create a board; the owner is auto-added as an editor member (spec §4).
+ *  N3: optionally file it under a workspace. */
+export async function createBoard(
+  userId: string,
+  title: string,
+  workspaceId?: string,
+): Promise<string> {
   const board = await getPrisma().board.create({
     data: {
       title: title.trim() || "Untitled board",
       ownerId: userId,
       members: { create: { userId, role: "editor" } },
+      ...(workspaceId ? { workspaceId } : {}),
     },
   });
   return board.id;

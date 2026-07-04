@@ -131,4 +131,68 @@ export const LIMITS = {
   columnsPerBoard: 50,
   cardsPerBoard: 500,
   historyLabel: 120,
+  // Phase 7: email auth + profile (shared by server actions and client forms).
+  passwordMin: 8,
+  userName: 80,
+  userBio: 280,
+  // N4: typed databases (clamped in dbMutations, same "no server CRDT decode"
+  // caveat as boards).
+  dbColumns: 40,
+  dbRows: 2000,
+  dbColumnName: 120,
+  dbCellText: 2000,
+  dbSelectOptions: 50,
+  // N5: file attachments (server-enforced at upload).
+  fileMaxBytes: 5 * 1024 * 1024, // 5 MB per file
+  userStorageBytes: 500 * 1024 * 1024, // 500 MB per user
+  attachmentsPerCell: 20,
 } as const;
+
+/** N4/N5/N7: database column types (attachment N5, formula N7). */
+export const DB_COLUMN_TYPES = [
+  "text",
+  "number",
+  "select",
+  "date",
+  "checkbox",
+  "attachment",
+  "formula",
+] as const;
+export type DbColumnType = (typeof DB_COLUMN_TYPES)[number];
+
+/** N4: the derived, render-ready database view (UI contract — no Yjs). */
+export interface DbColumnView {
+  id: string;
+  name: string;
+  type: DbColumnType;
+  options: string[]; // select choices (empty otherwise)
+  formula?: string; // N7: the expression for a formula column
+}
+export interface DbRowView {
+  id: string;
+  cells: Record<string, string | number | boolean>;
+}
+export interface DbView {
+  title: string;
+  columns: DbColumnView[];
+  rows: DbRowView[];
+}
+
+/** N4: mutation surface a component drives a database through (Yjs-free). */
+export interface DbActions {
+  setTitle(title: string): void;
+  addColumn(name: string, type: DbColumnType): void;
+  renameColumn(colId: string, name: string): void;
+  changeColumnType(colId: string, type: DbColumnType): void;
+  setSelectOptions(colId: string, options: string[]): void;
+  setColumnFormula(colId: string, formula: string): void;
+  deleteColumn(colId: string): void;
+  moveColumn(colId: string, toIndex: number): void;
+  addRow(): void;
+  deleteRow(rowId: string): void;
+  moveRow(rowId: string, toIndex: number): void;
+  setCell(rowId: string, colId: string, value: string | number | boolean | null): void;
+}
+
+export const roomForPage = (pageId: string): string => `page:${pageId}`;
+export const roomForDatabase = (databaseId: string): string => `db:${databaseId}`;
