@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * Phase 7 email-auth forms (client): sign in / sign up, verify code, intro
- * details. Pure presentational + server-action dispatch — no Yjs, no fetch.
+ * Email-first auth (2026-07-05). One progressive form: an email box decides the
+ * next step (returning → password, new → code + set password), OAuth below.
+ * Pure presentational + server-action dispatch — no Yjs, no fetch.
  */
 
 import { useActionState } from "react";
 import { LIMITS } from "@collabcanvas/shared";
 import {
   completeProfileAction,
-  emailAuthAction,
-  resendCodeAction,
-  verifyCodeAction,
+  emailFirstAction,
+  signInGitHubAction,
+  signInGoogleAction,
   type AuthFormState,
 } from "@/lib/actions";
 
@@ -29,113 +30,162 @@ function ErrorLine({ state }: { state: AuthFormState }) {
   );
 }
 
-/** One form, one action — the submit button picks the intent. */
-export function EmailAuthForm() {
+/** The whole login/signup flow: email → (password | code + set password). */
+export function EmailFirstForm() {
   const [state, dispatch, pending] = useActionState(
-    emailAuthAction,
-    {} as AuthFormState,
+    emailFirstAction,
+    { step: "email" } as AuthFormState,
   );
+  const step = state.step ?? "email";
+  const email = state.email ?? "";
 
   return (
-    <form action={dispatch} className="flex w-72 flex-col gap-2.5">
-      <input
-        className={INPUT}
-        name="email"
-        type="email"
-        required
-        autoComplete="email"
-        placeholder="you@example.com"
-        aria-label="Email"
-        defaultValue={state.email ?? ""}
-        key={state.email ?? "email"} // survive React 19's post-action form reset
-      />
-      <input
-        className={INPUT}
-        name="password"
-        type="password"
-        required
-        minLength={LIMITS.passwordMin}
-        autoComplete="current-password"
-        placeholder={`Password (${LIMITS.passwordMin}+ characters)`}
-        aria-label="Password"
-      />
-      <ErrorLine state={state} />
-      <button
-        className={PRIMARY}
-        name="intent"
-        value="signin"
-        disabled={pending}
-      >
-        {pending ? "Working…" : "Sign in"}
-      </button>
-      <button
-        className={SECONDARY}
-        name="intent"
-        value="signup"
-        disabled={pending}
-      >
-        Create account
-      </button>
-    </form>
-  );
-}
+    <div className="flex w-72 flex-col gap-3">
+      <form action={dispatch} className="flex flex-col gap-2.5">
+        <input type="hidden" name="step" value={step} />
 
-export function VerifyCodeForm({ email }: { email: string }) {
-  const [verifyState, verifyDispatch, verifyPending] = useActionState(
-    verifyCodeAction,
-    {} as AuthFormState,
-  );
-  const [resendState, resendDispatch, resendPending] = useActionState(
-    resendCodeAction,
-    {} as AuthFormState,
-  );
+        {step === "email" ? (
+          <input
+            className={INPUT}
+            name="email"
+            type="email"
+            required
+            autoFocus
+            autoComplete="email"
+            placeholder="you@example.com"
+            aria-label="Email"
+            defaultValue={email}
+            key={email || "email"} // survive React 19's post-action form reset
+          />
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded-[10px] border-2 border-[var(--line)] bg-[var(--surface-2)] px-[11px] py-2">
+              <span className="truncate font-sans text-[12.5px] font-semibold text-[var(--ink)]">
+                {email}
+              </span>
+              <button
+                type="submit"
+                name="intent"
+                value="change"
+                formNoValidate
+                className="ml-2 shrink-0 font-sans text-[11px] font-semibold text-[var(--ink-soft)] underline"
+              >
+                change
+              </button>
+            </div>
+            <input type="hidden" name="email" value={email} />
+          </>
+        )}
 
-  return (
-    <form className="flex w-72 flex-col gap-2.5">
-      <input type="hidden" name="email" value={email} />
-      <input
-        className={INPUT}
-        name="password"
-        type="password"
-        required
-        autoComplete="current-password"
-        placeholder="Your password"
-        aria-label="Password"
-      />
-      <input
-        className={`${INPUT} text-center font-mono text-lg tracking-[0.35em]`}
-        name="code"
-        inputMode="numeric"
-        pattern="\d{6}"
-        maxLength={6}
-        required
-        autoComplete="one-time-code"
-        placeholder="••••••"
-        aria-label="6-digit verification code"
-      />
-      <ErrorLine state={verifyState} />
-      <ErrorLine state={resendState} />
-      {resendState.ok ? (
-        <p className="m-0 font-sans text-[12px] font-semibold text-[var(--ink-soft)]">
-          A fresh code is on its way.
-        </p>
+        {step === "setup" && (
+          <p className="m-0 rounded-[9px] border-2 border-[var(--line)] bg-[var(--band-teal)] px-3 py-1.5 text-left font-sans text-[12px] font-semibold text-[#1c1a17]">
+            We emailed a 6-digit code to you. Enter it and choose a password.
+          </p>
+        )}
+
+        {step === "password" && (
+          <input
+            className={INPUT}
+            name="password"
+            type="password"
+            required
+            autoFocus
+            autoComplete="current-password"
+            placeholder="Your password"
+            aria-label="Password"
+          />
+        )}
+
+        {step === "setup" && (
+          <>
+            <input
+              className={`${INPUT} text-center font-mono text-lg tracking-[0.35em]`}
+              name="code"
+              inputMode="numeric"
+              pattern="\d{6}"
+              maxLength={6}
+              required
+              autoFocus
+              autoComplete="one-time-code"
+              placeholder="••••••"
+              aria-label="6-digit verification code"
+            />
+            <input
+              className={INPUT}
+              name="password"
+              type="password"
+              required
+              minLength={LIMITS.passwordMin}
+              maxLength={LIMITS.passwordMax}
+              autoComplete="new-password"
+              placeholder={`New password (${LIMITS.passwordMin}+ characters)`}
+              aria-label="New password"
+            />
+          </>
+        )}
+
+        {step === "oauth" && (
+          <p className="m-0 rounded-[9px] border-2 border-[var(--line)] bg-[var(--band-sun)] px-3 py-2 text-left font-sans text-[12px] font-semibold text-[#1c1a17]">
+            This email is linked to a Google or GitHub account — use a button
+            below to sign in.
+          </p>
+        )}
+
+        <ErrorLine state={state} />
+        {state.ok && step === "setup" ? (
+          <p className="m-0 font-sans text-[12px] font-semibold text-[var(--ink-soft)]">
+            A fresh code is on its way.
+          </p>
+        ) : null}
+
+        {step === "email" && (
+          <button className={PRIMARY} disabled={pending}>
+            {pending ? "Checking…" : "Continue"}
+          </button>
+        )}
+        {step === "password" && (
+          <button className={PRIMARY} disabled={pending}>
+            {pending ? "Signing in…" : "Sign in"}
+          </button>
+        )}
+        {step === "setup" && (
+          <>
+            <button className={PRIMARY} disabled={pending}>
+              {pending ? "Creating…" : "Create account"}
+            </button>
+            <button
+              className={SECONDARY}
+              name="intent"
+              value="resend"
+              formNoValidate
+              disabled={pending}
+            >
+              {pending ? "…" : "Resend code"}
+            </button>
+          </>
+        )}
+      </form>
+
+      {step === "email" || step === "oauth" ? (
+        <>
+          <div className="flex items-center gap-2 text-[var(--ink-faint)]">
+            <span className="h-px flex-1 bg-[var(--line)]" />
+            <span className="font-sans text-[11px] font-semibold">or</span>
+            <span className="h-px flex-1 bg-[var(--line)]" />
+          </div>
+          <form action={signInGitHubAction}>
+            <button className="cc-btn w-full bg-[var(--ink)] text-[var(--app)]">
+              Continue with GitHub
+            </button>
+          </form>
+          <form action={signInGoogleAction}>
+            <button className="cc-btn w-full bg-[var(--surface)] text-[var(--ink)]">
+              Continue with Google
+            </button>
+          </form>
+        </>
       ) : null}
-      <button
-        className={PRIMARY}
-        formAction={verifyDispatch}
-        disabled={verifyPending}
-      >
-        {verifyPending ? "Checking…" : "Verify"}
-      </button>
-      <button
-        className={SECONDARY}
-        formAction={resendDispatch}
-        formNoValidate
-        disabled={resendPending}
-      >
-        {resendPending ? "Sending…" : "Resend code"}
-      </button>
-    </form>
+    </div>
   );
 }
 

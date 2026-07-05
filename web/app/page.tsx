@@ -13,9 +13,9 @@ import {
   createPageFromForm,
   createWorkspaceFromForm,
   shareWorkspaceFromForm,
-  signInAction,
   signOutAction,
 } from "@/lib/actions";
+import { EmailFirstForm } from "@/components/auth/AuthForms";
 
 const BANDS = [
   "var(--band-violet)",
@@ -42,35 +42,10 @@ function Landing() {
         see everyone&apos;s cursors, and offline changes sync when you&apos;re back.
       </p>
 
-      <div className="flex flex-col gap-2.5">
-        <form
-          action={async () => {
-            "use server";
-            await signInAction("github");
-          }}
-        >
-          <button className="cc-btn w-64 bg-[var(--ink)] text-[var(--app)]">
-            Continue with GitHub
-          </button>
-        </form>
-        <form
-          action={async () => {
-            "use server";
-            await signInAction("google");
-          }}
-        >
-          <button className="cc-btn w-64 bg-[var(--surface)] text-[var(--ink)]">
-            Continue with Google
-          </button>
-        </form>
-        <Link href="/signin" className="cc-btn w-64 bg-[var(--sun)] text-[#1c1a17]">
-          Continue with Email
-        </Link>
-      </div>
+      <EmailFirstForm />
 
       <p className="max-w-md font-mono text-[10.5px] text-[var(--ink-faint)]">
-        Boards sync live — open the same board in two windows and watch them
-        mirror.
+        Enter your email to sign in or create an account.
       </p>
     </main>
   );

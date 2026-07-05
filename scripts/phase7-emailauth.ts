@@ -13,12 +13,16 @@ delete process.env.RESEND_API_KEY; // force the console-log mail path
 
 import { getPrisma } from "../packages/db/src/index";
 import {
+  checkEmail,
   issueVerificationCode,
   passwordLogin,
+  setPasswordAndVerify,
   signUpEmail,
+  startEmailVerification,
   verifyWithCode,
 } from "../web/lib/emailAuth";
 import { hashPassword, verifyPassword } from "../web/lib/password";
+import { LIMITS } from "@collabcanvas/shared";
 
 const EMAIL = "phase7@test.local";
 const OAUTH_EMAIL = "phase7-oauth@test.local";
@@ -191,6 +195,106 @@ async function main() {
   check(
     "no code issued for unknown email",
     !(await issueVerificationCode("stranger@test.local")),
+  );
+
+  // -- email-first flow (2026-07-05): checkEmail / startEmailVerification /
+  //    setPasswordAndVerify (code-first: verify email, THEN set password) ---
+  const EF = "phase7-ef@test.local";
+  await prisma.verificationToken.deleteMany({ where: { identifier: EF } });
+  await prisma.user.deleteMany({ where: { email: EF } });
+
+  check("checkEmail: unknown → new", (await checkEmail(EF)) === "new");
+  check("checkEmail: malformed → invalid", (await checkEmail("nope")) === "invalid");
+  check("checkEmail: verified account → known", (await checkEmail(EMAIL)) === "known");
+  check("checkEmail: OAuth account → oauth", (await checkEmail(OAUTH_EMAIL)) === "oauth");
+
+  const startNew = await startEmailVerification(EF);
+  check("startEmailVerification: new email ok", startNew.ok);
+  const efCode = lastCode;
+  check("startEmailVerification mailed a 6-digit code", /^\d{6}$/.test(efCode));
+  const efRow = await prisma.user.findUnique({ where: { email: EF } });
+  check(
+    "creates a PASSWORDLESS, unverified row",
+    !!efRow && efRow.passwordHash === null && efRow.emailVerified === null,
+  );
+  check(
+    "startEmailVerification refuses a verified account",
+    !(await startEmailVerification(EMAIL)).ok,
+  );
+
+  const efWrong = efCode === "000000" ? "000001" : "000000";
+  check(
+    "setPasswordAndVerify: wrong code → null",
+    (await setPasswordAndVerify(EF, efWrong, "new-password-123")) === null,
+  );
+  check("wrong code did NOT consume the code", (await tokenCount(EF)) === 1);
+  check(
+    "setPasswordAndVerify: short password → null (no consume)",
+    (await setPasswordAndVerify(EF, efCode, "short")) === null &&
+      (await tokenCount(EF)) === 1,
+  );
+
+  const efUser = await setPasswordAndVerify(EF, efCode, "new-password-123");
+  check("code sets password + verifies the email", efUser?.email === EF);
+  check(
+    "new account can now password-login",
+    typeof (await passwordLogin(EF, "new-password-123")) === "object",
+  );
+  check(
+    "setup code is one-shot (replay → null)",
+    (await setPasswordAndVerify(EF, efCode, "another-pass-9")) === null,
+  );
+  check("checkEmail after setup → known", (await checkEmail(EF)) === "known");
+
+  // Defense: an already-verified account can't be re-setup even WITH a code.
+  await issueVerificationCode(EF);
+  const efFresh = lastCode;
+  check(
+    "setPasswordAndVerify refuses an already-verified account",
+    (await setPasswordAndVerify(EF, efFresh, "hacker-pass-1")) === null,
+  );
+  check(
+    "verified account's password unchanged after refused re-setup",
+    typeof (await passwordLogin(EF, "new-password-123")) === "object",
+  );
+
+  // -- review hardening (2026-07-05) -------------------------------------
+  // (a) verified OAuth accounts (Google stamps emailVerified) route to oauth,
+  //     not to a "wrong password" dead end; (b) setPasswordAndVerify refuses
+  //     ANY OAuth-linked account even if a code exists (defense in depth);
+  //     (c) over-long passwords are rejected before the scrypt/consume.
+  const GOOG = "phase7-goog@test.local";
+  await prisma.verificationToken.deleteMany({ where: { identifier: GOOG } });
+  await prisma.user.deleteMany({ where: { email: GOOG } });
+  const goog = await prisma.user.create({
+    data: {
+      email: GOOG,
+      emailVerified: new Date(), // provider-stamped, but no password
+      accounts: {
+        create: { type: "oauth", provider: "google", providerAccountId: "phase7-goog-1" },
+      },
+    },
+  });
+  check("checkEmail: verified OAuth (no password) → oauth, not known", (await checkEmail(GOOG)) === "oauth");
+  await issueVerificationCode(GOOG); // a code exists for an OAuth email
+  check(
+    "setPasswordAndVerify refuses an OAuth-linked account (defense)",
+    (await setPasswordAndVerify(GOOG, lastCode, "attacker-pass-1")) === null,
+  );
+  check(
+    "OAuth account still passwordless after refused setup",
+    (await prisma.user.findUnique({ where: { id: goog.id } }))?.passwordHash === null,
+  );
+
+  const PWMAX = "phase7-pwmax@test.local";
+  await prisma.verificationToken.deleteMany({ where: { identifier: PWMAX } });
+  await prisma.user.deleteMany({ where: { email: PWMAX } });
+  await startEmailVerification(PWMAX);
+  const pwmaxCode = lastCode;
+  check(
+    "over-long password → null AND code not consumed",
+    (await setPasswordAndVerify(PWMAX, pwmaxCode, "x".repeat(LIMITS.passwordMax + 1))) === null &&
+      (await tokenCount(PWMAX)) === 1,
   );
 
   origLog(`\nphase7: ${passed}/${passed + failed} checks passed`);

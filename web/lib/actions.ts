@@ -22,13 +22,17 @@ import { getPrisma } from "@collabcanvas/db";
 import {
   EMAIL_RE,
   PASSWORD_MIN,
-  issueVerificationCode,
-  signUpEmail,
+  checkEmail,
+  startEmailVerification,
 } from "./emailAuth";
 import { LIMITS, type Role } from "@collabcanvas/shared";
 
-export async function signInAction(provider: "github" | "google") {
-  await signIn(provider, { redirectTo: "/" });
+/** Arg-less wrappers so client `<form action={…}>` can trigger OAuth directly. */
+export async function signInGitHubAction() {
+  await signIn("github", { redirectTo: "/" });
+}
+export async function signInGoogleAction() {
+  await signIn("google", { redirectTo: "/" });
 }
 
 export async function signOutAction() {
@@ -39,7 +43,13 @@ export async function signOutAction() {
 // Phase 7: email+password auth (useActionState-shaped: (prev, formData) => state)
 // ---------------------------------------------------------------------------
 
-export type AuthFormState = { error?: string; ok?: boolean; email?: string };
+export type AuthStep = "email" | "password" | "setup" | "oauth";
+export type AuthFormState = {
+  step?: AuthStep;
+  error?: string;
+  ok?: boolean;
+  email?: string;
+};
 
 function cleanEmail(formData: FormData): string {
   return String(formData.get("email") ?? "")
@@ -50,98 +60,107 @@ function cleanEmail(formData: FormData): string {
 
 const RATE_MSG = "Too many attempts — try again in a few minutes.";
 
-/** One action for the /signin form; the submit button sets intent. */
-export async function emailAuthAction(
+/**
+ * The whole email-first auth flow in one action (2026-07-05). A hidden `step`
+ * field says what the user is submitting; the returned `step` says what to show
+ * next. New users never see a password field before we've confirmed the account
+ * doesn't exist and mailed them a code (checkEmail → startEmailVerification).
+ */
+export async function emailFirstAction(
   _prev: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
   const email = cleanEmail(formData);
-  const password = String(formData.get("password") ?? "");
-  const intent = formData.get("intent") === "signup" ? "signup" : "signin";
-  if (!EMAIL_RE.test(email)) {
-    return { error: "That doesn't look like an email address.", email };
-  }
-  if (password.length < PASSWORD_MIN) {
-    return {
-      error: `Password must be at least ${PASSWORD_MIN} characters.`,
-      email,
-    };
+  const step = String(formData.get("step") ?? "email");
+  const intent = String(formData.get("intent") ?? "");
+
+  // "← use a different email" resets to the email box.
+  if (intent === "change") return { step: "email", email: "" };
+
+  // Resend a setup code — rate-limited, keeps the user on the setup step.
+  if (intent === "resend") {
+    if (!EMAIL_RE.test(email)) {
+      return { step: "setup", email, error: "That doesn't look like an email address." };
+    }
+    if (!rateLimit(`resend:${email}`, 3, 10 * 60_000)) {
+      return { step: "setup", email, error: "Too many codes — wait a few minutes." };
+    }
+    const r = await startEmailVerification(email).catch(() => ({
+      ok: false as const,
+      error: "Couldn't send the email — try again shortly.",
+    }));
+    return r.ok
+      ? { step: "setup", email, ok: true }
+      : { step: "setup", email, error: r.error };
   }
 
-  if (intent === "signup") {
-    if (!rateLimit(`signup:${email}`, 3, 10 * 60_000)) {
-      return { error: RATE_MSG, email };
+  // Step ①: an email decides the next step.
+  if (step === "email") {
+    if (!EMAIL_RE.test(email)) {
+      return { step: "email", email, error: "That doesn't look like an email address." };
     }
-    let result;
+    if (!rateLimit(`email-continue:${email}`, 10, 60_000)) {
+      return { step: "email", email, error: RATE_MSG };
+    }
+    const status = await checkEmail(email);
+    if (status === "known") return { step: "password", email };
+    if (status === "oauth") return { step: "oauth", email };
+    // new or unverified → mail a code, go set the password.
+    const r = await startEmailVerification(email).catch(() => ({
+      ok: false as const,
+      error: "Couldn't send the verification email — try again shortly.",
+    }));
+    if (!r.ok) return { step: "email", email, error: r.error };
+    return { step: "setup", email };
+  }
+
+  // Step ②A: returning user — password sign-in.
+  if (step === "password") {
+    const password = String(formData.get("password") ?? "");
+    if (!password) return { step: "password", email, error: "Enter your password." };
     try {
-      result = await signUpEmail(email, password);
-    } catch {
-      // Mail provider down — the account may exist now, but say so honestly
-      // instead of surfacing Next's opaque digest page (Ph7 review).
+      await signIn("credentials", { email, password, redirectTo: "/" });
+      return { step: "password", email };
+    } catch (err) {
+      if (!(err instanceof AuthError)) throw err; // NEXT_REDIRECT on success
+      const code = err instanceof CredentialsSignin ? err.code : "";
+      if (code === "unverified") {
+        // Rare (checkEmail sends verified users here) — mail a code, set password.
+        await startEmailVerification(email).catch(() => {});
+        return { step: "setup", email, error: "Verify your email to finish signing in." };
+      }
+      if (code === "rate") return { step: "password", email, error: RATE_MSG };
+      return { step: "password", email, error: "Wrong password. Try again." };
+    }
+  }
+
+  // Step ②B: new user — enter the code AND set a password.
+  if (step === "setup") {
+    const password = String(formData.get("password") ?? "");
+    const code = String(formData.get("code") ?? "").trim();
+    if (password.length < PASSWORD_MIN) {
       return {
-        error: "Couldn't send the verification email — try again shortly.",
+        step: "setup",
         email,
+        error: `Password must be at least ${PASSWORD_MIN} characters.`,
       };
     }
-    if (!result.ok) return { error: result.error, email };
-    redirect(`/verify?email=${encodeURIComponent(email)}`);
-  }
-
-  try {
-    await signIn("credentials", { email, password, redirectTo: "/" });
-    return {};
-  } catch (err) {
-    if (!(err instanceof AuthError)) throw err; // NEXT_REDIRECT on success
-    const code = err instanceof CredentialsSignin ? err.code : "";
-    // Right password, unconfirmed email → the verify page (its Resend button
-    // is the single, rate-limited way to get a fresh code).
-    if (code === "unverified") redirect(`/verify?email=${encodeURIComponent(email)}`);
-    if (code === "rate") return { error: RATE_MSG, email };
-    return { error: "Invalid email or password.", email };
-  }
-}
-
-export async function verifyCodeAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const email = cleanEmail(formData);
-  const password = String(formData.get("password") ?? "");
-  const code = String(formData.get("code") ?? "").trim();
-  if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code) || !password) {
-    return { error: "Enter your password and the 6-digit code from your email." };
-  }
-  // Brute-force guard lives in authorize (cred-code bucket) — it also covers
-  // direct POSTs to the credentials callback.
-  try {
-    await signIn("credentials", { email, password, code, redirectTo: "/welcome" });
-    return {};
-  } catch (err) {
-    if (!(err instanceof AuthError)) throw err;
-    if (err instanceof CredentialsSignin && err.code === "rate") {
-      return { error: RATE_MSG };
+    if (!/^\d{6}$/.test(code)) {
+      return { step: "setup", email, error: "Enter the 6-digit code from your email." };
     }
-    return { error: "Wrong code or password — check both, or resend the code." };
+    try {
+      await signIn("credentials", { email, password, code, mode: "setup", redirectTo: "/" });
+      return { step: "setup", email };
+    } catch (err) {
+      if (!(err instanceof AuthError)) throw err;
+      if (err instanceof CredentialsSignin && err.code === "rate") {
+        return { step: "setup", email, error: RATE_MSG };
+      }
+      return { step: "setup", email, error: "Wrong or expired code — check it, or resend." };
+    }
   }
-}
 
-export async function resendCodeAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const email = cleanEmail(formData);
-  if (!EMAIL_RE.test(email)) {
-    return { error: "That doesn't look like an email address." };
-  }
-  if (!rateLimit(`resend:${email}`, 3, 10 * 60_000)) {
-    return { error: "Too many codes requested — try again in a few minutes." };
-  }
-  try {
-    await issueVerificationCode(email); // silently no-ops for unknown emails
-  } catch {
-    return { error: "Couldn't send the email — try again shortly." };
-  }
-  return { ok: true };
+  return { step: "email", email }; // oauth step has no submit
 }
 
 export async function completeProfileAction(

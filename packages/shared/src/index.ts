@@ -142,6 +142,7 @@ export const LIMITS = {
   historyLabel: 120,
   // Phase 7: email auth + profile (shared by server actions and client forms).
   passwordMin: 8,
+  passwordMax: 200, // cap the scrypt input (server-enforced); UI mirrors it
   userName: 80,
   userBio: 280,
   // N4: typed databases (clamped in dbMutations, same "no server CRDT decode"

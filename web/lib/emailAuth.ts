@@ -131,3 +131,110 @@ export async function passwordLogin(
   if (!user.emailVerified) return "unverified";
   return user;
 }
+
+// ---------------------------------------------------------------------------
+// Email-first flow (2026-07-05): one email box decides the next step, so we
+// never ask for a password before we know the account exists. New users verify
+// the email with a code and set their password AFTER (code-first), which is
+// still takeover-safe: the code only reaches the mailbox owner, and only the
+// code-holder can set the password. checkEmail routes verified/OAuth accounts
+// AWAY from the setup path, and setPasswordAndVerify refuses verified accounts.
+// ---------------------------------------------------------------------------
+
+export type EmailStatus = "known" | "new" | "oauth" | "invalid";
+
+/** Which step the email-first form should show next for this address. */
+export async function checkEmail(email: string): Promise<EmailStatus> {
+  if (!EMAIL_RE.test(email)) return "invalid";
+  const user = await getPrisma().user.findUnique({
+    where: { email },
+    include: { accounts: { select: { id: true } } },
+  });
+  if (!user) return "new";
+  // OAuth-only account (no password) → OAuth, even if the provider stamped
+  // emailVerified (Google does) — otherwise they'd hit a "wrong password" wall.
+  if (user.accounts.length > 0 && !user.passwordHash) return "oauth";
+  if (user.emailVerified) return "known"; // real password account → sign-in
+  return "new"; // unverified password row (or none) → code-first setup
+}
+
+/**
+ * Begin (or resume) email verification for a NOT-yet-established account:
+ * ensure a passwordless user row exists, then mail a fresh code. Refuses
+ * verified/OAuth accounts (they own the address already — must sign in).
+ *
+ * ponytail: a passwordless row is created on first "continue" for a new email;
+ * abandoned ones are harmless (unverified, no password) — a periodic cleanup
+ * sweep is the follow-up, same as the orphan-attachment note. Abuse (mailing
+ * strangers) is bounded by the per-email rate limit at the action layer; a
+ * per-IP limit is the harder follow-up (in-process limiter, single node).
+ */
+export async function startEmailVerification(
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!EMAIL_RE.test(email)) {
+    return { ok: false, error: "That doesn't look like an email address." };
+  }
+  const prisma = getPrisma();
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    include: { accounts: { select: { id: true } } },
+  });
+  if (existing && (existing.emailVerified || existing.accounts.length > 0)) {
+    return {
+      ok: false,
+      error: "This email already has an account — sign in instead.",
+    };
+  }
+  await prisma.user.upsert({ where: { email }, update: {}, create: { email } });
+  await issueVerificationCode(email);
+  return { ok: true };
+}
+
+/**
+ * Consume a code and SET the account's password (code-first setup). Unlike
+ * verifyWithCode (which checks an already-set password), the code is the sole
+ * proof of ownership here, so it MUST be valid. Refuses an already-verified
+ * account (defense in depth — the UI never routes those here).
+ */
+export async function setPasswordAndVerify(
+  email: string,
+  code: string,
+  password: string,
+): Promise<AuthUser | null> {
+  if (
+    password.length < PASSWORD_MIN ||
+    password.length > LIMITS.passwordMax ||
+    !/^\d{6}$/.test(code)
+  ) {
+    return null;
+  }
+  const prisma = getPrisma();
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { accounts: { select: { id: true } } },
+  });
+  if (!user) return null;
+  // Established (verified) OR OAuth-linked → must sign in, never re-setup. This
+  // guard is the sole thing preventing an OAuth-account takeover, so it's made
+  // explicit here (defense in depth) rather than relying on "no code is ever
+  // minted for those emails" upstream.
+  if (user.emailVerified || user.accounts.length > 0) return null;
+  // Consume the code atomically (delete-returns-row → no double-spend), then
+  // check freshness — mirrors verifyWithCode so an expired code can't be reused.
+  const row = await prisma.verificationToken
+    .delete({
+      where: { identifier_token: { identifier: email, token: hashCode(code) } },
+    })
+    .catch(() => null);
+  if (!row || row.expires < new Date()) return null;
+  const passwordHash = await hashPassword(password);
+  try {
+    return await prisma.user.update({
+      where: { email },
+      data: { passwordHash, emailVerified: new Date() },
+    });
+  } catch {
+    return null; // user row vanished — treat as invalid
+  }
+}

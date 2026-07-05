@@ -14,7 +14,7 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { getPrisma } from "@collabcanvas/db";
-import { passwordLogin, verifyWithCode } from "./emailAuth";
+import { passwordLogin, setPasswordAndVerify } from "./emailAuth";
 import { rateLimit } from "./rateLimit";
 
 /** Correct password, unconfirmed email — the action routes this to /verify. */
@@ -34,7 +34,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     GitHub,
     Google,
     Credentials({
-      credentials: { email: {}, password: {}, code: {} },
+      credentials: { email: {}, password: {}, code: {}, mode: {} },
       async authorize(creds) {
         const email = String(creds?.email ?? "")
           .trim()
@@ -44,12 +44,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         // This route is reachable directly (POST /api/auth/callback/credentials),
         // so the brute-force guards live HERE, not in the server actions.
         // Separate buckets: fumbled passwords must not lock out a valid code.
+        const mode = String(creds?.mode ?? "");
         let user = null;
-        if (creds?.code) {
+        if (mode === "setup") {
+          // Code-first account setup (email-first flow): the mailed code is the
+          // proof of ownership; the password is SET now. setPasswordAndVerify
+          // refuses already-verified accounts, so this can't reset a real login.
           if (!rateLimit(`cred-code:${email}`, 10, 10 * 60_000)) {
             throw new RateLimited();
           }
-          user = await verifyWithCode(email, password, String(creds.code));
+          user = await setPasswordAndVerify(email, String(creds?.code ?? ""), password);
         } else {
           if (!rateLimit(`cred-pw:${email}`, 10, 60_000)) {
             throw new RateLimited();

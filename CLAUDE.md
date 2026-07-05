@@ -70,7 +70,7 @@ npx tsx scripts/phase3-persistence.ts write <room> && npx tsx scripts/phase3-per
 npx tsx scripts/phase4-auth.ts
 npx tsx scripts/phase5-offline.ts      # uses fake-indexeddb; includes restore-vs-offline regression
 npx tsx scripts/phase6-hardening.ts    # spawns its OWN server on :4100 (token expiry, 1MB cap, shutdown flush)
-npx tsx scripts/phase7-emailauth.ts    # email auth core vs local DB (no servers needed; 27 checks)
+npx tsx scripts/phase7-emailauth.ts    # email auth core + email-first flow vs local DB (48 checks; no servers)
 npx tsx scripts/phase-n1-richtext.ts   # rich-desc CRDT: migrate/preview/convergence/restore (18 checks, no servers)
 npx tsx scripts/phase-n2-pages.ts      # page room → PageSnapshot round-trip (4 checks; ws-server must run)
 npx tsx scripts/phase-n3-workspaces.ts # workspace share fan-out + isolation (23 checks; no servers, real DB)
@@ -166,6 +166,11 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   on err.code. Onboarding is data-derived (dashboard: name null → /welcome);
   completeProfileAction pushes the name into the JWT via unstable_update().
   OAuth buttons render but AUTH_GITHUB_*/AUTH_GOOGLE_* are still empty.
+  **UPDATE (2026-07-05): the LIVE signup path is now the email-first flow** —
+  checkEmail → password (known) | code-first setup (new: setPasswordAndVerify via
+  authorize `mode:"setup"`). The old signup (code+password verify via signUpEmail/
+  verifyWithCode) is superseded in the UI but the functions remain (harness). See
+  the "Email-first auth flow" bullet in Current state for the full contract.
 
 ## Current state (2026-07-05)
 
@@ -196,6 +201,42 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
 - **UI (2026-07-05): dashboard widened** — content was capped at `max-w-[920px]`
   (huge empty margins on ≥1080p); now `max-w-[1400px]` + `lg:px-10` (web/app/page.tsx).
   Shipped in the same `60248b9` deploy.
+- **Email-first auth flow (2026-07-05): login/signup redesigned (user request).**
+  One email box on the logged-out `/` decides the next step via `checkEmail`:
+  a VERIFIED account shows a password field (sign in); a NEW/unverified email
+  mails a 6-digit code, then the user enters the code AND sets a password —
+  code-first (verify the mailbox, THEN set the password). Takeover-safe: the
+  code reaches only the address owner, and only the code-holder sets the
+  password. OAuth (Google/GitHub) buttons kept below the email box.
+  - Backend (web/lib/emailAuth.ts): +checkEmail (known|new|oauth|invalid),
+    +startEmailVerification (passwordless row + code; refuses verified/OAuth),
+    +setPasswordAndVerify (consume code → set password+emailVerified; refuses
+    verified OR OAuth-linked; password 8–200). Old signUpEmail/verifyWithCode
+    KEPT (still harness-tested) but DEAD in the live UI.
+  - auth.ts authorize: new `mode:"setup"` branch → setPasswordAndVerify (cred-code
+    bucket); removed the bare-code (verifyWithCode) branch (no caller left).
+  - actions.ts: one emailFirstAction drives all steps via a hidden `step` field —
+    the SERVER (authorize/setPasswordAndVerify) is the auth authority, so a forged
+    step gains nothing. +signInGitHub/GoogleAction (arg-less form-action wrappers).
+  - UI: components/auth/AuthForms.tsx EmailFirstForm (progressive; replaces
+    EmailAuthForm/VerifyCodeForm). `/signin` + `/verify` now redirect("/");
+    /welcome onboarding unchanged. Branded HTML code email in mail.ts.
+  - Reviewed by an adversarial SUBAGENT (infra healthy again): NO high/med — the
+    takeover model holds (direct `mode=setup` POST on verified/OAuth emails
+    refused; codes one-shot/atomic; wrong/short pw don't consume). 3 LOW FIXED:
+    (a) OAuth guard added to setPasswordAndVerify (defense-in-depth — was the sole
+    load-bearing invariant); (b) password max 200 (scrypt DoS); (c) checkEmail
+    reorder so a verified-OAuth email (Google stamps emailVerified) routes to
+    `oauth`, not a "wrong password" dead end. 2 ACCEPTED (documented ponytail
+    ceilings): per-IP rate limit + junk-passwordless-row cleanup are follow-ups
+    (per-email limit only today; single-node in-proc limiter).
+  - Verified: phase7 harness **48/48** (was 27; +email-first + review-hardening),
+    typecheck/lint/build clean, pages render, AND a live Auth.js HTTP e2e (real
+    /api/auth/callback/credentials: `mode=setup` set password+emailVerified+session;
+    returning correct password → session; wrong password → rejected, no session).
+  - **NOT yet deployed.** Real verification emails still need RESEND_API_KEY +
+    EMAIL_FROM (user is creating a Resend key/domain — codes log to the server
+    until then; the flow otherwise works). See the RESEND bullet above.
 - **Phases 0–6 DONE** — built, adversarially reviewed, all findings fixed and
   re-verified (unit 15/15, harnesses p1–p6 green, typecheck/lint/build clean).
 - Pushed as `ff72966` → github.com/rohityaduvxnshi/CollabCanvas (main).
