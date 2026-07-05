@@ -234,9 +234,17 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
     typecheck/lint/build clean, pages render, AND a live Auth.js HTTP e2e (real
     /api/auth/callback/credentials: `mode=setup` set password+emailVerified+session;
     returning correct password → session; wrong password → rejected, no session).
-  - **NOT yet deployed.** Real verification emails still need RESEND_API_KEY +
-    EMAIL_FROM (user is creating a Resend key/domain — codes log to the server
-    until then; the flow otherwise works). See the RESEND bullet above.
+  - **DEPLOYED to the VPS 2026-07-05 (commit `4e1e976`)** — live + verified
+    (web root 200 shows the email box, /signin+/verify 307→/, ws healthy).
+  - **RESEND WIRED (2026-07-05):** `RESEND_API_KEY` + `EMAIL_FROM=CollabCanvas
+    <onboarding@resend.dev>` appended to VPS `web/.env.production` (22 lines);
+    key validated by a real test send. **Test-mode limitation:** Resend's
+    `onboarding@resend.dev` sender only delivers to the account owner
+    (`rohityaduvxnshi@gmail.com`) — every OTHER recipient 403s, so PUBLIC signup
+    still fails at the code-send until a domain is verified. To fix: user adds
+    `dash-board.in` in resend.com/domains → adds the shown SPF/DKIM DNS records →
+    then flip `EMAIL_FROM` to `noreply@dash-board.in` + restart. (API key was
+    pasted in chat — rotate if concerned.)
 - **Phases 0–6 DONE** — built, adversarially reviewed, all findings fixed and
   re-verified (unit 15/15, harnesses p1–p6 green, typecheck/lint/build clean).
 - Pushed as `ff72966` → github.com/rohityaduvxnshi/CollabCanvas (main).
