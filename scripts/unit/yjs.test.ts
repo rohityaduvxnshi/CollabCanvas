@@ -24,6 +24,7 @@ import {
   makeColumn,
 } from "../../web/lib/yjs/schema";
 import { rateLimit } from "../../web/lib/rateLimit";
+import { PresenceStore } from "../../web/lib/board/presenceStore";
 
 /** Exchange updates both ways — both docs converge to the merged state. */
 function syncDocs(a: Y.Doc, b: Y.Doc): void {
@@ -255,4 +256,47 @@ test("rateLimit: allows up to max, blocks beyond, recovers after the window", as
   assert.equal(rateLimit(key, 5, 200), false);
   await new Promise((r) => setTimeout(r, 250));
   assert.equal(rateLimit(key, 5, 200), true);
+});
+
+// Regression: the mouse position must NOT occupy the awareness `cursor` field.
+// TipTap's CollaborationCaret (rich card descriptions, N1) shares the room
+// awareness and HARDCODES reading `state.cursor` as a ProseMirror relative
+// position ({anchor, head}); a {x,y} mouse point there makes it call
+// createRelativePositionFromJSON(undefined) and crash the editor for every peer
+// with "Cannot read properties of undefined (reading 'type')" (observed live).
+test("presence: mouse lives under `pointer`, never `cursor` (TipTap owns cursor)", () => {
+  const writes: string[] = [];
+  const state: Record<string, unknown> = {};
+  const fakeAwareness = {
+    clientID: 1,
+    states: new Map<number, unknown>(),
+    setLocalState(s: Record<string, unknown>) {
+      for (const k of Object.keys(state)) delete state[k];
+      Object.assign(state, s);
+      this.states.set(this.clientID, state);
+    },
+    setLocalStateField(f: string, v: unknown) {
+      writes.push(f);
+      state[f] = v;
+      this.states.set(this.clientID, state);
+    },
+    getStates() {
+      return this.states;
+    },
+    on() {},
+    off() {},
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ps = new PresenceStore(fakeAwareness as any, {
+    id: "u1",
+    name: "U",
+    color: "#ef4444",
+  });
+  ps.setCursor(12, 34); // leading-edge flush is synchronous (lastFlushAt = 0)
+  ps.setEditing("card-1");
+
+  assert.ok(!("cursor" in state), "app must never write the awareness `cursor` field");
+  assert.deepEqual(state.pointer, { x: 12, y: 34 }, "mouse position lands under `pointer`");
+  assert.ok(writes.includes("pointer") && !writes.includes("cursor"));
+  ps.destroy();
 });

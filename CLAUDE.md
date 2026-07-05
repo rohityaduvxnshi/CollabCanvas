@@ -126,6 +126,13 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   hooks: useBoard(id)→{data,actions,status,canEdit}, usePresence()→{peers,setCursor
   (throttled internally ~20/s),clearCursor,setEditing}. Contract doc:
   docs/claude-design-brief.md. Cursor coords are board-CONTENT space.
+  - **Awareness field discipline (2026-07-05 crash fix):** the room `Awareness`
+    is SHARED by app presence AND TipTap CollaborationCaret. TipTap HARDCODES
+    reading `state.cursor` (relpos {anchor,head}) and `state.user`. So the app
+    publishes the mouse under `pointer` (NOT `cursor`) and its `user` shape must
+    stay relpos-compatible ({id,name,color,image}). Never put a non-relpos value
+    in `cursor`, or the caret's decoder crashes every peer's editor. Guarded by a
+    unit regression in scripts/unit/yjs.test.ts.
 - **ws-server**: rooms keyed by URL path (`board:<id>`); JWT verified at upgrade
   (401 pre-handshake); viewers' syncStep2/update messages DROPPED server-side;
   snapshots: load on room create, save debounced 3s (max-wait 10s), flush+evict
@@ -162,6 +169,29 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
 
 ## Current state (2026-07-05)
 
+- **BUGFIX (2026-07-05): board editor crash — awareness `cursor` field collision
+  (HIGH, multi-user data-loss-adjacent).** Root cause: PresenceStore published the
+  MOUSE position under awareness field `cursor` ({x,y}), but TipTap's
+  CollaborationCaret (N1) shares the same room awareness and HARDCODES reading
+  `state.cursor` as a ProseMirror relpos ({anchor,head}) — `y-tiptap` line 2276
+  `createRelativePositionFromJSON(aw.cursor.anchor)`. With a card description
+  open and a SECOND peer/tab moving its mouse, the caret decoded `{x,y}` →
+  `createRelativePositionFromJSON(undefined)` → `Cannot read properties of
+  undefined (reading 'type')` → the browser killed the tab ("This page couldn't
+  load"). Only bit when the doc was non-empty (caret skips decode while
+  binding.mapping.size===0) + a REMOTE peer existed (awarenessFilter skips self)
+  — i.e. exactly real collaborative editing. FIX: renamed the app's awareness
+  wire field `cursor`→`pointer` (packages/shared AwarenessState + presenceStore
+  init/flush/computePeers); PeerPresence UI field stays `cursor`. Proven with a
+  headless jsdom repro (real installed tiptap/yjs: `cursor`→crash, `pointer`→OK)
+  + unit regression (16/16, "presence: mouse lives under `pointer`, never
+  `cursor`") + phase2-presence 9/9 + typecheck clean. Residual (accepted): a
+  mixed old/new-client window during redeploy can still crash (old client emits
+  `cursor:{x,y}`) — self-heals once everyone reloads; single-user app.
+  **NOT yet redeployed to the VPS — the live site still crashes until a rebuild.**
+- **UI (2026-07-05): dashboard widened** — content was capped at `max-w-[920px]`
+  (huge empty margins on ≥1080p); now `max-w-[1400px]` + `lg:px-10` (web/app/page.tsx).
+  Also NOT yet live (needs redeploy).
 - **Phases 0–6 DONE** — built, adversarially reviewed, all findings fixed and
   re-verified (unit 15/15, harnesses p1–p6 green, typecheck/lint/build clean).
 - Pushed as `ff72966` → github.com/rohityaduvxnshi/CollabCanvas (main).

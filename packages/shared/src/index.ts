@@ -82,7 +82,16 @@ export interface PeerPresence {
   editingCardId: string | null;
 }
 
-/** The local awareness state each client publishes over the awareness protocol. */
+/**
+ * The local awareness state each client publishes over the awareness protocol.
+ *
+ * NOTE: the mouse position lives under `pointer`, NOT `cursor`. TipTap's
+ * CollaborationCaret (N1 rich descriptions) shares this same room awareness and
+ * HARDCODES reading `state.cursor` as a ProseMirror relative position
+ * ({anchor, head}); putting a {x, y} mouse point there makes its decoder call
+ * `createRelativePositionFromJSON(undefined)` and crash the whole editor. Keep
+ * app presence fields out of `cursor` / `user`'s relpos shape.
+ */
 export interface AwarenessState {
   user: {
     id: string;
@@ -90,7 +99,7 @@ export interface AwarenessState {
     color: string;
     image?: string;
   };
-  cursor: { x: number; y: number } | null;
+  pointer: { x: number; y: number } | null;
   editingCardId: string | null;
 }
 

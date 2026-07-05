@@ -32,7 +32,7 @@ export class PresenceStore {
 
   constructor(awareness: Awareness, user: LocalUser) {
     this.awareness = awareness;
-    const initial: AwarenessState = { user, cursor: null, editingCardId: null };
+    const initial: AwarenessState = { user, pointer: null, editingCardId: null };
     awareness.setLocalState(initial);
     this.peers = this.computePeers();
     this.subscribe = this.subscribe.bind(this);
@@ -52,7 +52,7 @@ export class PresenceStore {
         name: state.user.name,
         color: state.user.color,
         image: state.user.image,
-        cursor: state.cursor ?? null,
+        cursor: state.pointer ?? null,
         editingCardId: state.editingCardId ?? null,
       });
     }
@@ -105,7 +105,9 @@ export class PresenceStore {
     const cursor = this.pendingCursor;
     this.pendingCursor = undefined;
     this.lastFlushAt = Date.now();
-    this.awareness.setLocalStateField("cursor", cursor);
+    // `pointer`, NOT `cursor`: TipTap's CollaborationCaret reads `cursor` as a
+    // relpos and crashes on a {x,y} mouse point (see AwarenessState in shared).
+    this.awareness.setLocalStateField("pointer", cursor);
   }
 
   /** Report the local cursor (board-content coordinates). Safe to call on every
