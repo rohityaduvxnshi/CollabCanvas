@@ -188,10 +188,14 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   `cursor`") + phase2-presence 9/9 + typecheck clean. Residual (accepted): a
   mixed old/new-client window during redeploy can still crash (old client emits
   `cursor:{x,y}`) — self-heals once everyone reloads; single-user app.
-  **NOT yet redeployed to the VPS — the live site still crashes until a rebuild.**
+  **DEPLOYED to the VPS 2026-07-05 (commit `60248b9`)** via git archive → scp →
+  tar -x → vps-deploy.ps1; live site verified 200 + ws health OK after rebuild.
+  (Deploy note: the Bash tool's 2-min cap killed the SSH client mid-build, but
+  the remote vps-deploy.ps1 powershell survived and finished on its own —
+  services came back up. For long VPS runs, launch the deploy detached or poll.)
 - **UI (2026-07-05): dashboard widened** — content was capped at `max-w-[920px]`
   (huge empty margins on ≥1080p); now `max-w-[1400px]` + `lg:px-10` (web/app/page.tsx).
-  Also NOT yet live (needs redeploy).
+  Shipped in the same `60248b9` deploy.
 - **Phases 0–6 DONE** — built, adversarially reviewed, all findings fixed and
   re-verified (unit 15/15, harnesses p1–p6 green, typecheck/lint/build clean).
 - Pushed as `ff72966` → github.com/rohityaduvxnshi/CollabCanvas (main).
