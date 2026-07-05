@@ -160,7 +160,7 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   completeProfileAction pushes the name into the JWT via unstable_update().
   OAuth buttons render but AUTH_GITHUB_*/AUTH_GOOGLE_* are still empty.
 
-## Current state (2026-07-03)
+## Current state (2026-07-05)
 
 - **Phases 0–6 DONE** — built, adversarially reviewed, all findings fixed and
   re-verified (unit 15/15, harnesses p1–p6 green, typecheck/lint/build clean).
@@ -187,12 +187,27 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   wasn't working (creds never provisioned), so email signup + mailed 6-digit
   verification + /welcome intro is now the primary path; GitHub/Google buttons
   stay for later mapping. Built, adversarially reviewed (8 angles, 10 fixes —
-  see Version log), harness 27/27, live HTTP flow verified. NOT yet deployed:
-  the VPS still runs the Phase 6 build. Redeploy needs: (a) the standard
-  redeploy steps, (b) `npx prisma db push` on the VPS DB (new User columns),
-  (c) RESEND_API_KEY + EMAIL_FROM in web/.env.production for real emails
-  (without them, codes only appear in the service log — signups will stall),
-  (d) note: JWT switch logs out any pre-existing sessions (none real).
+  see Version log), harness 27/27, live HTTP flow verified.
+- **REDEPLOYED — Ph7+8+N1..N8 all LIVE on the VPS (2026-07-05).** Shipped
+  git commit `b08a8ee` via `git archive → scp → tar -x` over `C:\apps\collabcanvas`,
+  `npm ci` (557 pkgs), `prisma db push` (all N-track tables + User cols now in
+  Postgres 17), `next build`, services restarted. Verified externally through
+  the public domain: web root 200, landing renders "Continue with Email" (proves
+  the NEW build serves, not cached Ph6), `/signin` 200, `/verify`+`/welcome` 307
+  (auth redirect), ws `/health` ok, service logs clean. `FILE_STORAGE_DIR=C:\apps\filestore`
+  set (N5 attachments; dir created outside the repo so redeploys don't wipe it).
+  **EMAIL: RESEND still unconfigured (user chose "deploy now, add later")** — new
+  signups succeed but the 6-digit code only lands in `C:\apps\logs` (mail.ts dev
+  fallback), NOT the user's inbox. Wiring `RESEND_API_KEY`+`EMAIL_FROM` into
+  web/.env.production + restart enables real email; nothing else needed.
+  Deploy gotchas hit & fixed IN `deploy/scripts/vps-deploy.ps1` (root-cause, so
+  the next redeploy is clean): (1) `DATABASE_URL` is QUOTED in the .env → prisma
+  CLI P1013 "scheme not recognized" (dotenv strips quotes, the CLI doesn't) →
+  script now strips surrounding quotes. (2) `npm ci` EPERM unlinking `esbuild.exe`
+  — the running ws (tsx→esbuild) locks node_modules; `Stop-Service -Force` trips
+  WinSW `onfailure=restart` (5s) which bounces it back mid-build → script now does
+  a GRACEFUL `Stop-Service` (no -Force) BEFORE npm ci + 8s settle, `Start-Service`
+  at the end. (JWT switch logs out any pre-existing sessions — none real.)
 - OAuth creds (4 AUTH_* keys) remain empty locally and on the VPS — email
   auth unblocks login until the user provisions them.
 - Phase 6/7 accepted limitations (documented, honest): rate limiter is
@@ -270,14 +285,14 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   follow-up, not pretended). Harness 20/20 + typecheck/lint/build clean. Reviewed
   inline (low surface — pure string gen + client download; the one real risk, CSV
   injection, was found-and-fixed in review).
-- **NEXT: nothing on the roadmap — the whole N-track (N1..N8) is shipped.** All
-  harnesses green as of the 2026-07-04 final sweep: unit 15/15; phase1/4/5/6 PASS;
-  phase7 27/27; N1 18/18, N2 4/4, N3 23/23, N4 29/29, N5 19/19, N6 15/15,
-  N7 30/30, N8 20/20; typecheck/lint/build clean. Remaining work is DEPLOY only.
-  Redeploy (Phases 7+8+N1..N8 to the VPS) on user green light — needs db push
-  (User cols + Page*/Workspace*/Database*/Attachment tables) + RESEND keys +
-  FILE_STORAGE_DIR (a persistent dir outside the repo). Not yet committed to git
-  (working tree holds all of Ph7+8+N1..N8 — the last commit ff72966 is Phases 0-6).
+- **NEXT: DONE — whole roadmap shipped AND deployed.** All harnesses green
+  (2026-07-04 final sweep): unit 15/15; phase1/4/5/6 PASS; phase7 27/27; N1 18,
+  N2 4, N3 23, N4 29, N5 19, N6 15, N7 30, N8 20; typecheck/lint/build clean.
+  Committed `b08a8ee` (Ph7+8+N1..N8; ff72966 = Phases 0-6). REDEPLOYED to the
+  VPS 2026-07-05 — LIVE and externally verified (see the Phase-7/redeploy bullet
+  above). Only open follow-up: user provides `RESEND_API_KEY`+`EMAIL_FROM` to turn
+  on real verification emails (codes go to the service log until then). Both local
+  commits are UNPUSHED (offer to push to github.com/rohityaduvxnshi/CollabCanvas).
 - **Session note (2026-07-04):** this whole session ran with the claude-mem
   plugin's worker DOWN — its pre-Read hook blocked the Read TOOL, so ws-server
   files + a couple others were edited via Bash heredocs/node patch scripts
@@ -294,13 +309,21 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   the Read tool entirely (work around with `cat`/PowerShell Get-Content);
   other tools' PostToolUse hooks just error noisily. Unrelated to this repo;
   the plugin likely needs a restart. Left the user's plugin config untouched.
-- **VPS DEPLOY FROZEN by user** until their landing page is ready — do NOT ssh
-  to 144.172.98.43 until explicit green light. Box state + full runbook:
-  deploy/README.md (Node 22.23.1 ✓, PG 17.7 binaries but NO service, leftovers:
-  pginstall task + C:\pg-setup.exe + C:\node-setup.msi). Targets:
-  collabcanvas.dash-board.in + collabcanvas-ws.dash-board.in behind shared Caddy.
-  User-side prerequisites: OAuth apps (callbacks .../api/auth/callback/{github,google}),
-  provider firewall 80/443. Portfolio at dash-board.in root = user's own project.
+- **VPS DEPLOY — DONE (freeze lifted 2026-07-05 on the user's "deploy then").**
+  Box `144.172.98.43` (`ssh -i ~/.ssh/dashboard_vps Administrator@...`, PowerShell
+  default shell). Repo at `C:\apps\collabcanvas` (NOT a git repo — extracted
+  archive; redeploy = `git archive HEAD | scp | tar -x` over it, then run
+  `deploy\scripts\vps-deploy.ps1`). Services `collabcanvas-web`/`-ws` are WinSW
+  (`C:\apps\winsw\*.xml`, `onfailure=restart 5s`, StartType Automatic), logs
+  `C:\apps\logs`. Postgres 17 service running (db `collabcanvas`, DATABASE_URL is
+  QUOTED in the env files — the deploy script now strips quotes). Caddy = the
+  user's own scheduled task at `C:\dashboard\Caddyfile` (owns :80/:443). REDEPLOY
+  RECIPE that works: (1) commit, (2) `git archive HEAD > cc.tar`, scp to home,
+  (3) graceful `Stop-Service` both (NO -Force → avoids the WinSW recovery bounce),
+  (4) `tar -xf` over the repo, (5) run `vps-deploy.ps1` (now quote-safe +
+  stop-before-npm-ci). Targets: collabcanvas.dash-board.in +
+  collabcanvas-ws.dash-board.in. OAuth apps still unprovisioned (email is the
+  login path). Portfolio at dash-board.in root = user's own project (untouched).
 
 ## Notion-lite roadmap (after Phase 6 + deploy) — user-expanded scope
 
