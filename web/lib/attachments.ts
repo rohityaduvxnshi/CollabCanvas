@@ -64,6 +64,10 @@ export interface AttachmentMeta {
   mimeType: string;
 }
 
+/** The container a file is uploaded in — a database (N5) or a board (N9).
+ *  Exactly one; it also gates download access (owner OR a member of it). */
+export type AttachmentContainer = { databaseId: string } | { boardId: string };
+
 /**
  * Serialize per-user uploads so the read-then-write quota check is ATOMIC on
  * this (single) node — without it, N concurrent uploads all read the same
@@ -87,7 +91,7 @@ function serialByUser<T>(userId: string, fn: () => Promise<T>): Promise<T> {
  */
 export async function storeAttachment(
   ownerId: string,
-  databaseId: string,
+  container: AttachmentContainer,
   name: string,
   mimeType: string,
   bytes: Uint8Array,
@@ -104,7 +108,8 @@ export async function storeAttachment(
     const row = await getPrisma().attachment.create({
       data: {
         ownerId,
-        databaseId,
+        databaseId: "databaseId" in container ? container.databaseId : null,
+        boardId: "boardId" in container ? container.boardId : null,
         name: (name || "file").slice(0, 255),
         size,
         mimeType: (mimeType || "application/octet-stream").slice(0, 150),

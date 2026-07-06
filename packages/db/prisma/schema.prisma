@@ -96,6 +96,8 @@ model Board {
   // N3: which workspace this board is filed under (null = owner's Private).
   workspaceId String?
   workspace   Workspace?     @relation(fields: [workspaceId], references: [id])
+  // N9: files attached to this board's cards/columns (see Attachment.boardId).
+  attachments Attachment[]
 }
 
 model BoardMember {
@@ -242,18 +244,26 @@ model DatabaseSnapshot {
 // are enforced server-side at upload (LIMITS.fileMaxBytes / userStorageBytes).
 // ---------------------------------------------------------------------------
 
+// N5 + N9: a user-owned file. It records the CONTAINER it was uploaded in —
+// a database (N5, db-cell attachments) OR a board (N9, card/column attachments)
+// — which also gates download access (owner OR a member of that container).
+// Both are nullable: exactly one is set. Cascade so deleting the container
+// frees the row (on-disk bytes are swept separately — documented follow-up).
 model Attachment {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   ownerId    String
-  owner      User     @relation(fields: [ownerId], references: [id])
-  databaseId String
-  database   Database @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+  owner      User      @relation(fields: [ownerId], references: [id])
+  databaseId String?
+  database   Database? @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+  boardId    String?
+  board      Board?    @relation(fields: [boardId], references: [id], onDelete: Cascade)
   name       String
   size       Int
   mimeType   String
   storageKey String
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([ownerId])
   @@index([databaseId])
+  @@index([boardId])
 }

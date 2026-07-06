@@ -6,13 +6,26 @@
  */
 
 import { NextResponse } from "next/server";
+import type { Role } from "@collabcanvas/shared";
 import { auth } from "@/lib/auth";
 import { getDatabaseMembership } from "@/lib/databases";
+import { getMembership } from "@/lib/boards";
 import {
   deleteAttachment,
   getAttachment,
   readAttachmentBytes,
 } from "@/lib/attachments";
+
+/** The requester's role on the attachment's container (board OR database), or
+ *  null if they aren't a member. Owner is handled separately by the caller. */
+async function containerRole(
+  row: { databaseId: string | null; boardId: string | null },
+  userId: string,
+): Promise<Role | null> {
+  if (row.databaseId) return getDatabaseMembership(row.databaseId, userId);
+  if (row.boardId) return getMembership(row.boardId, userId);
+  return null;
+}
 
 /** RFC 5987 filename for Content-Disposition (ASCII fallback + UTF-8). */
 function contentDisposition(name: string): string {
@@ -34,9 +47,12 @@ export async function GET(
   const row = await getAttachment(attachmentId);
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Access is gated by membership in the OWNING database (not the uploader).
-  const role = await getDatabaseMembership(row.databaseId, session.user.id);
-  if (!role) return NextResponse.json({ error: "No access" }, { status: 403 });
+  // Access: the owner, or any member of the container (board or database) the
+  // file was uploaded in.
+  const isOwner = row.ownerId === session.user.id;
+  if (!isOwner && !(await containerRole(row, session.user.id))) {
+    return NextResponse.json({ error: "No access" }, { status: 403 });
+  }
 
   let bytes: Buffer;
   try {
@@ -72,7 +88,7 @@ export async function DELETE(
   if (!row) return NextResponse.json({ ok: true }); // already gone
 
   const isOwner = row.ownerId === session.user.id;
-  const isEditor = (await getDatabaseMembership(row.databaseId, session.user.id)) === "editor";
+  const isEditor = (await containerRole(row, session.user.id)) === "editor";
   if (!isOwner && !isEditor) {
     return NextResponse.json({ error: "No access" }, { status: 403 });
   }

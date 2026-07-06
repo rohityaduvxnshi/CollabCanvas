@@ -53,7 +53,7 @@ export async function POST(
   const bytes = new Uint8Array(await file.arrayBuffer());
   const result = await storeAttachment(
     session.user.id,
-    databaseId,
+    { databaseId },
     file.name,
     file.type,
     bytes,

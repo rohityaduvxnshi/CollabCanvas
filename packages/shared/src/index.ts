@@ -152,9 +152,10 @@ export const LIMITS = {
   dbColumnName: 120,
   dbCellText: 2000,
   dbSelectOptions: 50,
-  // N5: file attachments (server-enforced at upload).
-  fileMaxBytes: 5 * 1024 * 1024, // 5 MB per file
-  userStorageBytes: 500 * 1024 * 1024, // 500 MB per user
+  // N5 + N9: file attachments (server-enforced at upload). Per-FILE stays
+  // Int32-safe (≤10 MB); the per-USER total is a SUM (never one column).
+  fileMaxBytes: 10 * 1024 * 1024, // 10 MB per file
+  userStorageBytes: 5 * 1024 * 1024 * 1024, // 5 GB per user
   attachmentsPerCell: 20,
 } as const;
 
