@@ -21,6 +21,7 @@
  */
 
 import * as Y from "yjs";
+import type { FileRef } from "@collabcanvas/shared";
 
 // Top-level shared-type names (single source of truth).
 export const META = "meta";
@@ -140,6 +141,39 @@ export const ensureCardDescFragment = (doc: Y.Doc, card: YCard): Y.XmlFragment =
   });
   return frag;
 };
+
+// --- File attachments (N9) -------------------------------------------------
+// Cards AND columns carry a `files` field: a JSON string of FileRef[] (name +
+// size denormalized so deriveBoardView renders chips without a DB hit; the
+// bytes + access control live server-side in the Attachment table).
+//
+// ponytail: LWW on the whole list — two clients attaching to the SAME card in
+// the same sub-second window can drop one entry. Acceptable for a low-frequency
+// action (same tradeoff as the N5 db-cell attachment JSON); a nested Y.Array
+// would merge concurrent adds if it ever matters.
+export const FILES = "files";
+
+const parseFiles = (raw: unknown): FileRef[] => {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const arr: unknown = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(
+      (f): f is FileRef =>
+        !!f &&
+        typeof (f as FileRef).id === "string" &&
+        typeof (f as FileRef).name === "string" &&
+        typeof (f as FileRef).size === "number",
+    );
+  } catch {
+    return [];
+  }
+};
+
+/** Files attached to a card (N9). */
+export const cardFiles = (card: YCard): FileRef[] => parseFiles(card.get(FILES));
+/** Files attached to a column (N9). */
+export const colFiles = (col: YColumn): FileRef[] => parseFiles(col.get(FILES));
 
 // --- Entity factories ------------------------------------------------------
 

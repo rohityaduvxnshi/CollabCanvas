@@ -27,6 +27,7 @@ const BANDS = [
 
 export interface BoardProps {
   data: BoardData;
+  boardId: string;
   canEdit: boolean;
   actions: BoardActions;
   /** Presence hooks (optional). */
@@ -150,6 +151,7 @@ function EmptyState({
 
 export function Board({
   data,
+  boardId,
   canEdit,
   actions,
   getCardEditing,
@@ -176,6 +178,7 @@ export function Board({
               <Column
                 key={column.id}
                 column={column}
+                boardId={boardId}
                 band={BANDS[i % BANDS.length]}
                 canEdit={canEdit}
                 atCardCap={atCardCap}
@@ -184,6 +187,8 @@ export function Board({
                 onDeleteColumn={() => actions.deleteColumn(column.id)}
                 onUpdateCard={actions.updateCard}
                 onDeleteCard={actions.deleteCard}
+                onSetCardFiles={actions.setCardFiles}
+                onSetColumnFiles={(files) => actions.setColumnFiles(column.id, files)}
                 getCardEditing={getCardEditing}
                 onCardEditFocus={onCardEditFocus}
                 onCardEditBlur={onCardEditBlur}

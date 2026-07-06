@@ -392,6 +392,7 @@ export function BoardScreen({ boardId, members = [] }: BoardScreenProps) {
           >
             <Board
               data={data}
+              boardId={boardId}
               canEdit={canEdit}
               actions={actions}
               getCardEditing={(cardId) => editingByCard.get(cardId) ?? null}

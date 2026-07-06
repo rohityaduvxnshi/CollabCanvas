@@ -13,16 +13,27 @@
 // sees Yjs types, only these.
 // ---------------------------------------------------------------------------
 
+/** A reference to an uploaded file (N9). The name+size are denormalized into
+ *  the doc so the board renders chips without a DB round-trip; bytes + access
+ *  live server-side (Attachment table + /api/attachments/:id). */
+export interface FileRef {
+  id: string;
+  name: string;
+  size: number;
+}
+
 export interface CardView {
   id: string;
   title: string;
   description: string;
+  files: FileRef[];
 }
 
 export interface ColumnView {
   id: string;
   title: string;
   cards: CardView[];
+  files: FileRef[];
 }
 
 export interface BoardData {
@@ -47,6 +58,10 @@ export interface BoardActions {
   deleteCard(cardId: string): void;
   moveCard(cardId: string, toColumnId: string, toIndex: number): void;
   moveColumn(columnId: string, toIndex: number): void;
+  // N9: attach/detach files on a card or column (the caller commits the whole
+  // new list — it already holds it from the upload response / a remove).
+  setCardFiles(cardId: string, files: FileRef[]): void;
+  setColumnFiles(columnId: string, files: FileRef[]): void;
 }
 
 // ---------------------------------------------------------------------------

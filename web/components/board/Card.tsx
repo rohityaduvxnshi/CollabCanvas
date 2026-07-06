@@ -11,17 +11,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { CardView } from "@collabcanvas/shared";
+import type { CardView, FileRef } from "@collabcanvas/shared";
 // N1: the one non-presentational child — an opaque collaborative editor from
 // the lib/board seam (same layer as the hooks this tree already consumes).
 import { CardDescEditor } from "@/lib/board/CardDescEditor";
+import { FileAttachments } from "./FileAttachments";
 
 export interface CardProps {
   card: CardView;
   columnId: string;
+  boardId: string;
   canEdit: boolean;
   onUpdate: (patch: Partial<Pick<CardView, "title" | "description">>) => void;
   onDelete: () => void;
+  /** N9: commit the card's new attachment list. */
+  onSetFiles: (files: FileRef[]) => void;
   /** Presence: who (if anyone) is currently editing this card. */
   editingBy?: { name: string; color: string } | null;
   /** Presence: called when this card's editor opens/closes. */
@@ -35,9 +39,11 @@ const stopDrag = (e: React.PointerEvent) => e.stopPropagation();
 export function Card({
   card,
   columnId,
+  boardId,
   canEdit,
   onUpdate,
   onDelete,
+  onSetFiles,
   editingBy,
   onEditFocus,
   onEditBlur,
@@ -115,6 +121,14 @@ export function Card({
           placeholder="Card title"
         />
         <CardDescEditor cardId={card.id} />
+        <div className="mt-2">
+          <FileAttachments
+            boardId={boardId}
+            files={card.files}
+            canEdit={canEdit}
+            onChange={onSetFiles}
+          />
+        </div>
         <div className="mt-1.5 flex items-center justify-between">
           <button
             onClick={() => {
@@ -173,6 +187,21 @@ export function Card({
         <p className="mt-1 whitespace-pre-wrap font-sans text-[11px] leading-snug text-[var(--ink-soft)]">
           {card.description}
         </p>
+      )}
+      {card.files.length > 0 && (
+        <div className="mt-1.5 flex flex-col gap-0.5">
+          {card.files.map((f) => (
+            <a
+              key={f.id}
+              href={`/api/attachments/${f.id}`}
+              onPointerDown={stopDrag}
+              className="truncate font-sans text-[10.5px] font-semibold text-[var(--ink-soft)] underline"
+              title={`${f.name} — download`}
+            >
+              📎 {f.name}
+            </a>
+          ))}
+        </div>
       )}
       {canEdit && (
         <div className="absolute right-1 top-1 hidden gap-1 group-hover:flex">

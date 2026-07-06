@@ -12,6 +12,7 @@ import { LIMITS, type BoardActions } from "@collabcanvas/shared";
 import { newId } from "./ids";
 import {
   colCardOrder,
+  FILES,
   findColumnIdOfCard,
   getCards,
   getColumnOrder,
@@ -21,6 +22,15 @@ import {
   removeAllFromArray,
   type YColumn,
 } from "./schema";
+import type { FileRef } from "@collabcanvas/shared";
+
+/** Sanitize + clamp a file list before writing it into the doc (N9). */
+const cleanFiles = (files: FileRef[]): FileRef[] =>
+  files.slice(0, LIMITS.attachmentsPerCell).map((f) => ({
+    id: String(f.id).slice(0, 64),
+    name: String(f.name).slice(0, 255),
+    size: Number.isFinite(f.size) ? Number(f.size) : 0,
+  }));
 
 /** Clamp an insertion index into `[0, length]`. */
 const clampIndex = (index: number, length: number): number =>
@@ -157,6 +167,24 @@ export function createBoardActions(
         // self-healing approach moveCard uses.
         removeAllFromArray(columnOrder, columnId);
         columnOrder.insert(clampIndex(toIndex, columnOrder.length), [columnId]);
+        touch();
+      });
+    },
+
+    setCardFiles(cardId, files) {
+      doc.transact(() => {
+        const card = cards.get(cardId);
+        if (!card) return;
+        card.set(FILES, JSON.stringify(cleanFiles(files)));
+        touch();
+      });
+    },
+
+    setColumnFiles(columnId, files) {
+      doc.transact(() => {
+        const col = columns.get(columnId);
+        if (!col) return;
+        col.set(FILES, JSON.stringify(cleanFiles(files)));
         touch();
       });
     },

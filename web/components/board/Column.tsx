@@ -14,12 +14,15 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { CardView, ColumnView } from "@collabcanvas/shared";
+import type { CardView, ColumnView, FileRef } from "@collabcanvas/shared";
 import { Card } from "./Card";
 import { AddCardInput } from "./AddCardInput";
+import { FileAttachments } from "./FileAttachments";
 
 export interface ColumnProps {
   column: ColumnView;
+  /** Board id — for the attachment upload endpoint. */
+  boardId: string;
   /** Header band color (a CSS color; the container cycles the design palette). */
   band: string;
   canEdit: boolean;
@@ -33,6 +36,9 @@ export interface ColumnProps {
     patch: Partial<Pick<CardView, "title" | "description">>,
   ) => void;
   onDeleteCard: (cardId: string) => void;
+  /** N9: commit a card's / this column's new attachment list. */
+  onSetCardFiles: (cardId: string, files: FileRef[]) => void;
+  onSetColumnFiles: (files: FileRef[]) => void;
   /** Presence hooks (optional). */
   getCardEditing?: (cardId: string) => { name: string; color: string } | null;
   onCardEditFocus?: (cardId: string) => void;
@@ -41,6 +47,7 @@ export interface ColumnProps {
 
 export function Column({
   column,
+  boardId,
   band,
   canEdit,
   atCardCap = false,
@@ -49,6 +56,8 @@ export function Column({
   onDeleteColumn,
   onUpdateCard,
   onDeleteCard,
+  onSetCardFiles,
+  onSetColumnFiles,
   getCardEditing,
   onCardEditFocus,
   onCardEditBlur,
@@ -180,9 +189,11 @@ export function Column({
               key={card.id}
               card={card}
               columnId={column.id}
+              boardId={boardId}
               canEdit={canEdit}
               onUpdate={(patch) => onUpdateCard(card.id, patch)}
               onDelete={() => onDeleteCard(card.id)}
+              onSetFiles={(files) => onSetCardFiles(card.id, files)}
               editingBy={getCardEditing?.(card.id) ?? null}
               onEditFocus={() => onCardEditFocus?.(card.id)}
               onEditBlur={() => onCardEditBlur?.(card.id)}
@@ -200,6 +211,19 @@ export function Column({
           <AddCardInput onAdd={onAddCard} canEdit={canEdit} />
         )}
       </div>
+
+      {/* Column-level attachments (N9) — files that belong to the whole list. */}
+      {(canEdit || column.files.length > 0) && (
+        <div className="flex-none border-t-[2.5px] border-[var(--line)] px-2.5 py-2">
+          <FileAttachments
+            boardId={boardId}
+            files={column.files}
+            canEdit={canEdit}
+            onChange={onSetColumnFiles}
+            label="Column files"
+          />
+        </div>
+      )}
     </div>
   );
 }

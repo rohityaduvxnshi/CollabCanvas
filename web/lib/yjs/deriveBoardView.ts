@@ -23,8 +23,10 @@ import type * as Y from "yjs";
 import type { BoardData, CardView, ColumnView } from "@collabcanvas/shared";
 import {
   cardDescText,
+  cardFiles,
   cardTitle,
   colCardOrder,
+  colFiles,
   colTitle,
   getCards,
   getColumnOrder,
@@ -62,10 +64,16 @@ export function deriveBoardView(doc: Y.Doc): BoardData {
         title: cardTitle(card),
         // N1: plain-text preview of the rich fragment (legacy string fallback).
         description: cardDescText(card),
+        files: cardFiles(card), // N9
       });
     }
 
-    columnViews.push({ id: colId, title: colTitle(col), cards: cardViews });
+    columnViews.push({
+      id: colId,
+      title: colTitle(col),
+      cards: cardViews,
+      files: colFiles(col), // N9
+    });
   }
 
   return { title, columns: columnViews };

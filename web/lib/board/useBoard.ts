@@ -26,6 +26,8 @@ const NO_OP: BoardActions = {
   deleteCard: () => {},
   moveCard: () => {},
   moveColumn: () => {},
+  setCardFiles: () => {},
+  setColumnFiles: () => {},
 };
 
 export interface UseBoardResult {

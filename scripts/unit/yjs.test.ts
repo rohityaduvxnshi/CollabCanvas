@@ -300,3 +300,41 @@ test("presence: mouse lives under `pointer`, never `cursor` (TipTap owns cursor)
   assert.ok(writes.includes("pointer") && !writes.includes("cursor"));
   ps.destroy();
 });
+
+// N9: files attach to cards + columns as a denormalized FileRef[] and surface
+// through deriveBoardView; the mutation sanitizes (name length) and clamps the
+// count so a hostile/oversized list can't bloat the doc.
+test("N9: card + column files round-trip through the view (sanitized + clamped)", () => {
+  const doc = seedDoc(1);
+  const actions = createBoardActions(doc);
+  actions.setCardFiles("c1", [
+    { id: "a1", name: "photo.png", size: 1234 },
+    { id: "a2", name: "x".repeat(400), size: 9 },
+  ]);
+  actions.setColumnFiles("col1", [{ id: "b1", name: "spec.pdf", size: 999 }]);
+
+  const view = deriveBoardView(doc);
+  const card = view.columns[0].cards[0];
+  assert.equal(card.files.length, 2);
+  assert.equal(card.files[0].id, "a1");
+  assert.equal(card.files[1].name.length, 255); // name clamped
+  assert.equal(view.columns[0].files[0].id, "b1");
+
+  // Count is clamped to the per-container cap.
+  actions.setCardFiles(
+    "c1",
+    Array.from({ length: LIMITS.attachmentsPerCell + 5 }, (_, i) => ({
+      id: `f${i}`,
+      name: `f${i}`,
+      size: 1,
+    })),
+  );
+  assert.equal(
+    deriveBoardView(doc).columns[0].cards[0].files.length,
+    LIMITS.attachmentsPerCell,
+  );
+
+  // Detach clears the list.
+  actions.setCardFiles("c1", []);
+  assert.equal(deriveBoardView(doc).columns[0].cards[0].files.length, 0);
+});
