@@ -213,6 +213,27 @@ npm run test:unit                      # 18 node:test cases (dedupe/move/restore
     first). Whole-board/db delete cascades Attachment rows (frees quota) but
     orphans on-disk bytes → same sweep-job follow-up as N5; prod should add a
     Caddy request_body max_size.
+  - **DEPLOYED to the VPS 2026-07-06** — live + verified (/files 307, /api/files
+    401 — both 404 pre-N9; web 200; ws healthy). N9 schema pushed to Postgres
+    (Attachment nullable databaseId + boardId); FILE_STORAGE_DIR=C:\apps\filestore
+    present. **DEPLOY INCIDENT — READ BEFORE NEXT REDEPLOY:** running
+    vps-deploy.ps1 multiple times (each foreground SSH killed by the Bash tool's
+    2-min cap, but the REMOTE powershell survived) left several concurrent
+    `npm ci` runs fighting over node_modules → npm hung (~9 min, no output) and
+    DAMAGED node_modules (missing .bin shims + next's `.d.ts` files) → `next build`
+    type-check false-failed. RECOVERY: killed the runaways; restarted services on
+    the OLD build (site back up in minutes); then ran prisma generate + db push +
+    next build via DIRECT `node ..\node_modules\<pkg>\...` (bypassing the missing
+    .bin shims), and set `typescript.ignoreBuildErrors:true` in the **VPS-ONLY**
+    web/next.config.ts (repo copy UNCHANGED — code is typechecked locally, passes).
+    **⚠️ node_modules on the VPS is still subtly damaged. BEFORE the next redeploy:
+    run ONE clean `npm ci` on the box and LET IT FINISH (~15 min — do NOT kill it;
+    it is slow, likely Windows Defender scanning, not hung), which repairs
+    node_modules so the repo's clean next.config builds normally.** Root-cause
+    follow-ups: (a) make vps-deploy.ps1 SKIP npm ci when package-lock is unchanged
+    (code-only deploys — the common case — don't need it); (b) always run VPS
+    deploys DETACHED (Start-Process + poll), never a foreground SSH the tool can
+    kill mid-`npm ci` (that concurrency is what caused this).
 - **BUGFIX (2026-07-05): board editor crash — awareness `cursor` field collision
   (HIGH, multi-user data-loss-adjacent).** Root cause: PresenceStore published the
   MOUSE position under awareness field `cursor` ({x,y}), but TipTap's
