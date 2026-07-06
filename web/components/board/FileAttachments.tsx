@@ -77,9 +77,13 @@ export function FileAttachments({
     }
   };
 
-  const remove = async (id: string) => {
-    onChange(files.filter((f) => f.id !== id)); // optimistic (detach from the doc)
-    await fetch(`/api/attachments/${id}`, { method: "DELETE" }).catch(() => {});
+  // DETACH only — remove the chip from THIS card/column. We must NOT delete the
+  // file globally: the same file can be reused on other cards/columns/db-cells
+  // (the Reuse picker + /files), so a global delete here would 404 every other
+  // reference and wrongly free quota. Actual deletion (bytes + row) lives in the
+  // /files manager, which confirms "delete everywhere". (Review N9.)
+  const remove = (id: string) => {
+    onChange(files.filter((f) => f.id !== id));
   };
 
   // Reuse: attach an already-uploaded file (no re-upload). Only your own files.
@@ -126,6 +130,10 @@ export function FileAttachments({
           ? (e) => {
               e.preventDefault();
               setDragOver(false);
+              // Ignore a drop while an upload is in flight — addFiles closes over
+              // the current `files`, so a concurrent add would commit a stale
+              // list and clobber the in-flight one (review N9).
+              if (busy) return;
               if (e.dataTransfer.files.length) void addFiles(e.dataTransfer.files);
             }
           : undefined
@@ -150,7 +158,7 @@ export function FileAttachments({
             <button
               type="button"
               onClick={() => remove(f.id)}
-              title="Remove file"
+              title="Remove from here (the file stays in your Files)"
               className="flex-none font-sans text-[11px] font-semibold text-[var(--coral)]"
             >
               ✕
@@ -172,8 +180,9 @@ export function FileAttachments({
             </button>
             <button
               type="button"
+              disabled={busy}
               onClick={togglePicker}
-              className="rounded-[8px] border-2 border-[var(--line)] px-2 py-1 font-sans text-[11px] font-semibold text-[var(--ink-soft)] hover:bg-[var(--sunk)]"
+              className="rounded-[8px] border-2 border-[var(--line)] px-2 py-1 font-sans text-[11px] font-semibold text-[var(--ink-soft)] hover:bg-[var(--sunk)] disabled:opacity-60"
             >
               ↻ Reuse
             </button>

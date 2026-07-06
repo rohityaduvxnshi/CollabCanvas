@@ -76,9 +76,11 @@ export function AttachmentCell({
     }
   };
 
-  const remove = async (id: string) => {
-    commit(files.filter((f) => f.id !== id)); // optimistic
-    await fetch(`/api/attachments/${id}`, { method: "DELETE" }).catch(() => {});
+  // DETACH only — the same file can be reused elsewhere (N9 reuse picker +
+  // /files), so removing a chip must not delete the file globally. Actual
+  // deletion (bytes + row + quota) lives in the /files manager. (Review N9.)
+  const remove = (id: string) => {
+    commit(files.filter((f) => f.id !== id));
   };
 
   return (

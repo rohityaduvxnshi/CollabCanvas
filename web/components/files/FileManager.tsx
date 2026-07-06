@@ -47,7 +47,8 @@ export function FileManager({ initial }: { initial: UserFile[] }) {
     setBusy(id);
     const res = await fetch(`/api/attachments/${id}`, { method: "DELETE" }).catch(() => null);
     setBusy(null);
-    if (res && res.ok) setFiles((fs) => fs.filter((f) => f.id !== id));
+    // 404 = already gone → drop it from the list too.
+    if (res && (res.ok || res.status === 404)) setFiles((fs) => fs.filter((f) => f.id !== id));
   };
 
   const startRename = (f: UserFile) => {

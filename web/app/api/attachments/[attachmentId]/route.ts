@@ -46,13 +46,14 @@ export async function GET(
 
   const { attachmentId } = await params;
   const row = await getAttachment(attachmentId);
-  if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
   // Access: the owner, or any member of the container (board or database) the
-  // file was uploaded in.
-  const isOwner = row.ownerId === session.user.id;
-  if (!isOwner && !(await containerRole(row, session.user.id))) {
-    return NextResponse.json({ error: "No access" }, { status: 403 });
+  // file was uploaded in. Return 404 for BOTH "missing" and "no access" so the
+  // status can't be used as an existence oracle (review N9).
+  const denied =
+    !row ||
+    (row.ownerId !== session.user.id && !(await containerRole(row, session.user.id)));
+  if (denied || !row) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   let bytes: Buffer;
@@ -86,12 +87,12 @@ export async function DELETE(
   }
   const { attachmentId } = await params;
   const row = await getAttachment(attachmentId);
-  if (!row) return NextResponse.json({ ok: true }); // already gone
-
-  const isOwner = row.ownerId === session.user.id;
-  const isEditor = (await containerRole(row, session.user.id)) === "editor";
-  if (!isOwner && !isEditor) {
-    return NextResponse.json({ error: "No access" }, { status: 403 });
+  // Uniform 404 for "missing" and "not allowed" — no existence oracle, and the
+  // access check runs BEFORE the not-found short-circuit (review N9).
+  const isOwner = row?.ownerId === session.user.id;
+  const isEditor = row ? (await containerRole(row, session.user.id)) === "editor" : false;
+  if (!row || (!isOwner && !isEditor)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   await deleteAttachment(attachmentId);
   return NextResponse.json({ ok: true });

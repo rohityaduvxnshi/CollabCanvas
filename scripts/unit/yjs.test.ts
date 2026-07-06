@@ -338,3 +338,30 @@ test("N9: card + column files round-trip through the view (sanitized + clamped)"
   actions.setCardFiles("c1", []);
   assert.equal(deriveBoardView(doc).columns[0].cards[0].files.length, 0);
 });
+
+// N9 review fix: a history restore must reinstate the snapshot's card/column
+// files (in place), not silently keep the live list — else attachments vanish
+// on restore.
+test("N9: restore reinstates card + column files from the snapshot (and clears if the snapshot had none)", () => {
+  const doc = seedDoc(1);
+  const actions = createBoardActions(doc);
+  actions.setCardFiles("c1", [{ id: "x", name: "x.pdf", size: 1 }]);
+  actions.setColumnFiles("col1", [{ id: "y", name: "y.png", size: 2 }]);
+  const snap = Y.encodeStateAsUpdate(doc);
+
+  actions.setCardFiles("c1", []); // drift away from the snapshot
+  actions.setColumnFiles("col1", []);
+  assert.equal(deriveBoardView(doc).columns[0].cards[0].files.length, 0);
+
+  replaceDocFromSnapshot(doc, snap);
+  const view = deriveBoardView(doc);
+  assert.equal(view.columns[0].cards[0].files[0].id, "x", "card files restored");
+  assert.equal(view.columns[0].files[0].id, "y", "column files restored");
+
+  // Restoring a snapshot that had NO files must clear the live ones.
+  const doc2 = seedDoc(1);
+  const snapNoFiles = Y.encodeStateAsUpdate(doc2);
+  createBoardActions(doc2).setCardFiles("c1", [{ id: "z", name: "z", size: 1 }]);
+  replaceDocFromSnapshot(doc2, snapNoFiles);
+  assert.equal(deriveBoardView(doc2).columns[0].cards[0].files.length, 0);
+});

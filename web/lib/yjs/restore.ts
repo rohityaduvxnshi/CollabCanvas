@@ -23,6 +23,7 @@ import {
   cardTitle,
   colCardOrder,
   colTitle,
+  FILES,
   getCards,
   getColumnOrder,
   getColumns,
@@ -32,6 +33,15 @@ import {
   type YCard,
   type YColumn,
 } from "./schema";
+
+/** Restore a card/column's N9 `files` JSON string to the snapshot's value
+ *  (in place, like every other field), or clear it if the snapshot had none —
+ *  otherwise a restore silently keeps the LIVE attachments (data mismatch). */
+function restoreFiles(live: Y.Map<unknown>, snapshot: Y.Map<unknown>): void {
+  const f = snapshot.get(FILES);
+  if (typeof f === "string") live.set(FILES, f);
+  else live.delete(FILES);
+}
 
 /**
  * N1: restore a card's rich-description fragment IN PLACE — the live
@@ -93,6 +103,7 @@ export function replaceDocFromSnapshot(doc: Y.Doc, snapshot: Uint8Array): void {
         live = cards.get(cardId)!;
       }
       restoreDescFragment(live, tCard);
+      restoreFiles(live, tCard); // N9
     }
     for (const cardId of Array.from(cards.keys())) {
       if (!tempCards.has(cardId)) cards.delete(cardId);
@@ -114,6 +125,7 @@ export function replaceDocFromSnapshot(doc: Y.Doc, snapshot: Uint8Array): void {
       for (const cardId of colCardOrder(tCol).toArray()) {
         if (tempCards.has(cardId)) order.push([cardId]);
       }
+      restoreFiles(live, tCol); // N9
     }
     for (const colId of Array.from(columns.keys())) {
       if (!tempColumns.has(colId)) columns.delete(colId);
