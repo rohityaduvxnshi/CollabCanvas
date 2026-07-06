@@ -10,6 +10,7 @@ import type { Role } from "@collabcanvas/shared";
 import { auth } from "@/lib/auth";
 import { getDatabaseMembership } from "@/lib/databases";
 import { getMembership } from "@/lib/boards";
+import { renameUserFile } from "@/lib/files";
 import {
   deleteAttachment,
   getAttachment,
@@ -93,5 +94,22 @@ export async function DELETE(
     return NextResponse.json({ error: "No access" }, { status: 403 });
   }
   await deleteAttachment(attachmentId);
+  return NextResponse.json({ ok: true });
+}
+
+/** Rename a file (its uploader only) — used by the file manager. */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ attachmentId: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+  const { attachmentId } = await params;
+  const body = (await req.json().catch(() => null)) as { name?: string } | null;
+  const name = typeof body?.name === "string" ? body.name : "";
+  const ok = await renameUserFile(session.user.id, attachmentId, name);
+  if (!ok) return NextResponse.json({ error: "Couldn't rename." }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

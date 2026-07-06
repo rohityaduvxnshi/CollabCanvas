@@ -34,6 +34,8 @@ export function FileAttachments({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [myFiles, setMyFiles] = useState<FileRef[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const uploadOne = async (file: File): Promise<FileRef | null> => {
@@ -78,6 +80,34 @@ export function FileAttachments({
   const remove = async (id: string) => {
     onChange(files.filter((f) => f.id !== id)); // optimistic (detach from the doc)
     await fetch(`/api/attachments/${id}`, { method: "DELETE" }).catch(() => {});
+  };
+
+  // Reuse: attach an already-uploaded file (no re-upload). Only your own files.
+  const togglePicker = async () => {
+    if (pickerOpen) {
+      setPickerOpen(false);
+      return;
+    }
+    setError(null);
+    setMyFiles(null);
+    setPickerOpen(true);
+    try {
+      const res = await fetch("/api/files");
+      const json = (await res.json().catch(() => null)) as { files?: FileRef[] } | null;
+      setMyFiles(json?.files ?? []);
+    } catch {
+      setMyFiles([]);
+    }
+  };
+
+  const attachExisting = (f: FileRef) => {
+    if (files.some((x) => x.id === f.id)) return;
+    if (files.length >= LIMITS.attachmentsPerCell) {
+      setError(`Up to ${LIMITS.attachmentsPerCell} files here.`);
+      return;
+    }
+    onChange([...files, f]);
+    setPickerOpen(false);
   };
 
   return (
@@ -130,24 +160,63 @@ export function FileAttachments({
       ))}
 
       {canEdit ? (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-            className="rounded-[8px] border-2 border-dashed border-[var(--line)] px-2 py-1 font-sans text-[11px] font-semibold text-[var(--ink-soft)] hover:bg-[var(--sunk)] disabled:opacity-60"
-          >
-            {busy ? "Uploading…" : `📎 ${label} — or drop here`}
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) void addFiles(e.target.files);
-            }}
-          />
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => inputRef.current?.click()}
+              className="rounded-[8px] border-2 border-dashed border-[var(--line)] px-2 py-1 font-sans text-[11px] font-semibold text-[var(--ink-soft)] hover:bg-[var(--sunk)] disabled:opacity-60"
+            >
+              {busy ? "Uploading…" : `📎 ${label} — or drop here`}
+            </button>
+            <button
+              type="button"
+              onClick={togglePicker}
+              className="rounded-[8px] border-2 border-[var(--line)] px-2 py-1 font-sans text-[11px] font-semibold text-[var(--ink-soft)] hover:bg-[var(--sunk)]"
+            >
+              ↻ Reuse
+            </button>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) void addFiles(e.target.files);
+              }}
+            />
+          </div>
+          {pickerOpen ? (
+            <div className="max-h-40 overflow-y-auto rounded-[9px] border-2 border-[var(--line)] bg-[var(--surface-2)] p-1">
+              {myFiles === null ? (
+                <span className="block px-1 py-0.5 font-sans text-[10.5px] text-[var(--ink-faint)]">
+                  Loading your files…
+                </span>
+              ) : myFiles.filter((f) => !files.some((x) => x.id === f.id)).length === 0 ? (
+                <span className="block px-1 py-0.5 font-sans text-[10.5px] text-[var(--ink-faint)]">
+                  No other files to reuse.
+                </span>
+              ) : (
+                myFiles
+                  .filter((f) => !files.some((x) => x.id === f.id))
+                  .map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => attachExisting(f)}
+                      className="block w-full truncate rounded-[6px] px-1.5 py-1 text-left font-sans text-[11px] font-semibold text-[var(--ink)] hover:bg-[var(--surface)]"
+                      title={`Attach ${f.name}`}
+                    >
+                      📎 {f.name}{" "}
+                      <span className="font-mono text-[9px] text-[var(--ink-faint)]">
+                        {fmtSize(f.size)}
+                      </span>
+                    </button>
+                  ))
+              )}
+            </div>
+          ) : null}
         </div>
       ) : files.length === 0 ? (
         <span className="font-sans text-[10.5px] text-[var(--ink-faint)]">No files</span>

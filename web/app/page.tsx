@@ -93,6 +93,12 @@ export default async function Home({
           CollabCanvas
         </div>
         <div className="ml-auto flex items-center gap-2.5">
+          <Link
+            href="/files"
+            className="cc-press rounded-[9px] border-2 border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 font-sans text-[12.5px] font-semibold text-[var(--ink)] shadow-[2px_2px_0_var(--shadow)]"
+          >
+            📎 Files
+          </Link>
           <span
             className="flex h-[30px] w-[30px] items-center justify-center rounded-full border-2 border-[var(--line)] bg-[var(--sun)] font-sans text-[10.5px] font-bold text-[#1c1a17]"
             title={you}

@@ -145,6 +145,41 @@ async function main() {
   check("concurrency: usage never exceeds the cap", (await att.userUsageBytes(user.id)) <= LIMITS.userStorageBytes);
   await prisma.attachment.deleteMany({ where: { ownerId: user.id } });
 
+  // -- N9: board container + file-manager listing / rename -----------------
+  const files = await import("../web/lib/files");
+  const board = await prisma.board.create({
+    data: {
+      title: "N9 Board",
+      ownerId: user.id,
+      members: { create: { userId: user.id, role: "editor" } },
+    },
+  });
+  const bStored = await att.storeAttachment(
+    user.id,
+    { boardId: board.id },
+    "board.txt",
+    "text/plain",
+    Buffer.from("a board file"),
+  );
+  check("storeAttachment: board container works", bStored.ok === true);
+  const bId = bStored.ok ? bStored.attachment.id : "";
+  const bRow = await prisma.attachment.findUnique({ where: { id: bId } });
+  check("board attachment has boardId set, databaseId null", bRow?.boardId === board.id && bRow?.databaseId === null);
+
+  const list = await files.listUserFiles(user.id);
+  check(
+    "listUserFiles: returns the board file with its board container",
+    list.some((f) => f.id === bId && f.container.kind === "board" && f.container.title === "N9 Board"),
+  );
+  check("renameUserFile: owner renames", await files.renameUserFile(user.id, bId, "renamed.txt"));
+  check("renameUserFile: non-owner rejected", !(await files.renameUserFile("not-the-owner", bId, "hax.txt")));
+  check(
+    "rename persisted the new name",
+    (await prisma.attachment.findUnique({ where: { id: bId } }))?.name === "renamed.txt",
+  );
+  await prisma.attachment.deleteMany({ where: { boardId: board.id } });
+  await prisma.board.delete({ where: { id: board.id } }).catch(() => {});
+
   // -- cleanup -------------------------------------------------------------
   await prisma.database.delete({ where: { id: db.id } }).catch(() => {});
 
