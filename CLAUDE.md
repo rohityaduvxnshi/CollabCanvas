@@ -75,11 +75,11 @@ npx tsx scripts/phase-n1-richtext.ts   # rich-desc CRDT: migrate/preview/converg
 npx tsx scripts/phase-n2-pages.ts      # page room → PageSnapshot round-trip (4 checks; ws-server must run)
 npx tsx scripts/phase-n3-workspaces.ts # workspace share fan-out + isolation (23 checks; no servers, real DB)
 npx tsx scripts/phase-n4-databases.ts  # typed-db CRDT + `db:` PG round-trip (29 checks; ws-server must run)
-npx tsx scripts/phase-n5-attachments.ts# file quota + disk round-trip + concurrency (19 checks; no servers, real DB + temp store)
+npx tsx scripts/phase-n5-attachments.ts# file quota + disk round-trip + concurrency + N9 board container/file-manager (25 checks; no servers, real DB + temp store)
 npx tsx scripts/phase-n6-views.ts      # db view/aggregate logic (15 checks; pure, no servers)
 npx tsx scripts/phase-n7-formulas.ts   # formula engine + derive integration (30 checks; pure, no servers)
 npx tsx scripts/phase-n8-exports.ts    # export generators: CSV/markdown/HTML + injection/escaping (20 checks; pure, no servers)
-npm run test:unit                      # 15 node:test cases (dedupe/move/restore/caps/rateLimit)
+npm run test:unit                      # 18 node:test cases (dedupe/move/restore/caps/rateLimit/presence-pointer/N9-files)
 ```
 
 **Gotchas that have burned us:**
@@ -172,8 +172,47 @@ npm run test:unit                      # 15 node:test cases (dedupe/move/restore
   verifyWithCode) is superseded in the UI but the functions remain (harness). See
   the "Email-first auth flow" bullet in Current state for the full contract.
 
-## Current state (2026-07-05)
+## Current state (2026-07-06)
 
+- **N9 DONE (2026-07-06): file attachments on boards + a file manager.** Attach
+  any file to board CARDS and COLUMNS (drag-drop or click) plus a `/files`
+  manager. Reuses N5's disk storage + per-user quota, RAISED to 10 MB/file +
+  5 GB/user (per-file `size` stays Int32-safe; the per-user total is a SUM).
+  - Schema: Attachment generalized from database-only to a USER-OWNED file that
+    records its container — nullable `databaseId` (N5 db-cells) OR new nullable
+    `boardId` (N9), exactly one, Cascade. Download/delete/rename gated by owner
+    OR a member of that container (board OR database). storeAttachment takes an
+    AttachmentContainer.
+  - Board: card + column Y.Maps carry a `files` JSON field (FileRef[]
+    denormalized so deriveBoardView renders chips with no DB hit);
+    setCardFiles/setColumnFiles clamp+sanitize; restore reinstates it IN PLACE.
+    New POST /api/boards/:id/attachments (editors). Shared FileAttachments
+    component (drag-drop + click upload, download chips, DETACH, Reuse picker) in
+    the card editor + a column footer; the card face shows read-only chips.
+    boardId threads BoardScreen→Board→Column→Card→FileAttachments.
+  - File manager: /files page (every file you own, its container link, a 5 GB
+    usage meter, download/rename/remove) + web/lib/files.ts (listUserFiles,
+    renameUserFile — owner only) + GET /api/files (reuse picker) + PATCH
+    /api/attachments/:id (rename). Dashboard gains a "Files" link.
+  - Reviewed by a 4-dimension adversarial WORKFLOW (access-control, upload-safety,
+    CRDT, UI-dataflow — each finding independently verified). NO HIGH; takeover/
+    IDOR/upload-safety clean. 4 fixed: (1) MED the chip ✕ was a GLOBAL delete
+    (bytes+row) → now DETACH-only, so reused copies survive; hard-delete stays in
+    /files behind its "delete everywhere" confirm; same fix in db AttachmentCell.
+    (2) MED restore dropped the `files` field → restored in place for cards+cols.
+    (3) MED a drop/reuse during an in-flight upload clobbered the upload → gated
+    on `busy`. (4) LOW 404-vs-403 existence oracle → uniform 404 on GET+DELETE.
+  - Verified: typecheck/lint/build clean, unit 18/18 (files round-trip + restore
+    regression), phase-n5 25/25 (board container + listUserFiles + owner rename),
+    phase1 convergence + phase5 restore PASS. Commits 43700d8, 64ef2d3, 7eb1d96,
+    10a5867.
+  - v1 gaps (ponytail, documented): rename/delete don't rewrite the denormalized
+    chip name / leave dead chips where referenced (no reverse index); cross-board
+    reuse for a NON-owner teammate is gated by the file's origin container; LWW on
+    the files list. FOLDERS + copy/cut/paste DEFERRED (Phase 3 — confirm value
+    first). Whole-board/db delete cascades Attachment rows (frees quota) but
+    orphans on-disk bytes → same sweep-job follow-up as N5; prod should add a
+    Caddy request_body max_size.
 - **BUGFIX (2026-07-05): board editor crash — awareness `cursor` field collision
   (HIGH, multi-user data-loss-adjacent).** Root cause: PresenceStore published the
   MOUSE position under awareness field `cursor` ({x,y}), but TipTap's
